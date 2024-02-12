@@ -2,6 +2,7 @@ use std::{env, fs::File, io::Read, process::exit};
 
 use serde_pickle as pickle;
 
+pub mod reader;
 pub mod types;
 
 fn main() {
@@ -14,6 +15,6 @@ fn main() {
     let reader: Box<dyn Read> = Box::new(File::open(&args[1]).expect("filename is not specified"));
     let decoded: pickle::Value =
         pickle::value_from_reader(reader, Default::default()).expect("Can not parse file");
-    let tranet: types::PublicTransport = decoded.into();
-    print!("{:?}", tranet);
+    let tranet: types::PublicTransport = (&decoded).into();
+    print!("{:#?}", tranet);
 }
