@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 geo-types = "0.7.12"
 serde-pickle = "1.1.1"
+utm = "0.1.6"
 wkt = "0.10.3"

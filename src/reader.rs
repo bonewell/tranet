@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use serde_pickle::{HashableValue, Value};
 
-use crate::types::{Passage, Platform, Point, PublicTransport, Route, Trip};
+use crate::map::{Passage, Platform, Point, PublicTransport, Route, Trip};
 
 fn value_to_vec<'a>(value: &'a Value, default: &'a Vec<Value>) -> &'a Vec<Value> {
     match value {
