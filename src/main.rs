@@ -1,6 +1,7 @@
 use std::{env, process::exit};
 
 mod map;
+mod path;
 mod platforms;
 mod raptor;
 mod reader;
@@ -18,7 +19,9 @@ fn main() {
     let map = read_map(&args[1]);
     let raptor = Raptor::new(&map);
     for (from, to) in read_points(&args[2]) {
-        let paths = raptor.find_path(&from, &to);
-        println!("{:?}", paths);
+        for path in raptor.find_path(&from, &to) {
+            println!("{}", path);
+            println!();
+        }
     }
 }
