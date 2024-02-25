@@ -1,8 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Read},
+};
 
-use serde_pickle::{HashableValue, Value};
+use geo_types::Point;
+use serde_pickle::{value_from_reader, HashableValue, Value};
+use wkt::TryFromWkt;
 
-use crate::map::{Passage, Platform, Point, PublicTransport, Route, Trip};
+use crate::map;
+use crate::map::{Passage, Platform, PublicTransport, Route, Trip};
 
 fn value_to_vec<'a>(value: &'a Value, default: &'a Vec<Value>) -> &'a Vec<Value> {
     match value {
@@ -83,7 +90,7 @@ fn make_map(value: &Value) -> HashMap<Passage, i64> {
     map
 }
 
-impl From<&Value> for Point {
+impl From<&Value> for map::Point {
     fn from(value: &Value) -> Self {
         let default = BTreeMap::new();
         let point = value_to_dict(&value, &default);
@@ -165,4 +172,27 @@ impl From<&Value> for PublicTransport {
             passages,
         }
     }
+}
+
+pub fn read_map(filename: &String) -> PublicTransport {
+    let reader: Box<dyn Read> = Box::new(File::open(&filename).expect("Can not open map"));
+    let decoded: Value = value_from_reader(reader, Default::default()).expect("Can not parse map");
+    (&decoded).into()
+}
+
+fn parse_points(line: &String) -> (Point<f64>, Point<f64>) {
+    let points: Vec<&str> = line.split(',').collect();
+    (
+        Point::try_from_wkt_str(points[0]).unwrap(),
+        Point::try_from_wkt_str(points[1]).unwrap(),
+    )
+}
+
+pub fn read_points(filename: &String) -> Vec<(Point<f64>, Point<f64>)> {
+    let mut points: Vec<(Point<f64>, Point<f64>)> = Vec::new();
+    let file = File::open(filename).expect("Can not open points");
+    for line in BufReader::new(file).lines().flatten() {
+        points.push(parse_points(&line));
+    }
+    points
 }
