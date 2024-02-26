@@ -15,11 +15,35 @@ impl Part {
     pub fn new(points: Vec<Coord<f64>>) -> Self {
         Self { points }
     }
+
+    pub fn first(&self) -> &Coord<f64> {
+        self.points.first().unwrap()
+    }
+
+    pub fn last(&self) -> &Coord<f64> {
+        self.points.last().unwrap()
+    }
 }
 
 impl Path {
     pub fn new(parts: Vec<Part>) -> Self {
         Self { parts }
+    }
+
+    pub fn first(&self) -> &Part {
+        self.parts.first().unwrap()
+    }
+
+    pub fn last(&self) -> &Part {
+        self.parts.last().unwrap()
+    }
+
+    pub fn push(&mut self, part: Part) {
+        self.parts.push(part);
+    }
+
+    pub fn concat(&mut self, path: Path) {
+        self.parts.extend(path.parts.into_iter());
     }
 }
 

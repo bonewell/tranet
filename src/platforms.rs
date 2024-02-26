@@ -7,6 +7,17 @@ pub struct Platforms<'a> {
     zone: u8,
 }
 
+pub struct Walking {
+    pub platform: usize,
+    pub duration: f64,
+}
+
+impl Walking {
+    fn new(platform: usize, duration: f64) -> Self {
+        Self { platform, duration }
+    }
+}
+
 impl<'a> Platforms<'a> {
     pub fn new(platforms: &'a Vec<Platform>, zone: u8) -> Self {
         Self { platforms, zone }
@@ -21,13 +32,15 @@ impl<'a> Platforms<'a> {
         Point::new(x, y)
     }
 
-    pub fn find(&self, point: &Point<f64>) -> Vec<usize> {
+    pub fn find(&self, point: &Point<f64>) -> Vec<Walking> {
+        let mut near = Vec::new();
         let point = self.to_utm_point(point);
-        let mut near: Vec<usize> = Vec::new();
-        for (i, p) in self.platforms.iter().enumerate() {
-            let location = self.to_utm_point(&Point::new(p.point.lon, p.point.lat));
-            if is_near(&point, &location) {
-                near.push(i);
+        for (index, platform) in self.platforms.iter().enumerate() {
+            let platform = Point::new(platform.point.lon, platform.point.lat);
+            let platform = self.to_utm_point(&platform);
+            if is_near(&point, &platform) {
+                let walking = Walking::new(index, duration(&point, &platform));
+                near.push(walking);
             }
         }
         near
@@ -38,6 +51,14 @@ fn is_near(lhs: &Point<f64>, rhs: &Point<f64>) -> bool {
     let dx = lhs.x() - rhs.x();
     let dy = lhs.y() - rhs.y();
     let d2 = dx * dx + dy * dy;
-    let r = 3000.0;
+    let r = 1000.0;
     d2 < r * r
+}
+
+fn duration(from: &Point<f64>, to: &Point<f64>) -> f64 {
+    let dx = from.x() - to.x();
+    let dy = from.y() - to.y();
+    let d2 = dx * dx + dy * dy;
+    let speed: f64 = 5000.0 / 3600.0;
+    d2.sqrt() / speed
 }

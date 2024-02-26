@@ -16,10 +16,9 @@ fn main() {
         exit(1);
     }
 
-    let map = read_map(&args[1]);
-    let raptor = Raptor::new(&map);
+    let raptor = Raptor::new(read_map(&args[1]));
     for (from, to) in read_points(&args[2]) {
-        for path in raptor.find_path(&from, &to) {
+        for path in raptor.find_path(from, to) {
             println!("{}", path);
             println!();
         }
