@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read},
@@ -71,23 +71,35 @@ fn make_vec_of_i64(value: &Value) -> Vec<i64> {
         .collect()
 }
 
-fn make_passage(from: &HashableValue, to: &HashableValue) -> Passage {
-    (hashvalue_to_i64(&from), hashvalue_to_i64(&to))
+fn make_vec_of_index(value: &Value) -> Vec<usize> {
+    value_to_vec(&value, &vec![])
+        .iter()
+        .map(|v| make_index(v))
+        .collect()
+}
+
+fn make_usize(value: &HashableValue) -> usize {
+    hashvalue_to_i64(&value) as usize
+}
+
+fn make_index(value: &Value) -> usize {
+    value_to_i64(&value) as usize
 }
 
 fn make_time(value: &Value) -> i64 {
     value_to_f64(&value) as i64
 }
 
-fn make_map(value: &Value) -> HashMap<Passage, i64> {
+fn make_vec_of_passage(value: &Value, size: usize) -> Vec<Vec<Passage>> {
+    let mut passages: Vec<Vec<Passage>> = vec![];
+    passages.resize_with(size, Default::default);
     let default = BTreeMap::new();
-    let mut map = HashMap::new();
     for (from, v) in value_to_dict(&value, &default).iter() {
         for (to, time) in value_to_dict(&v, &default).iter() {
-            map.insert(make_passage(from, to), make_time(time));
+            passages[make_usize(&from)].push(Passage::new(make_usize(&to), make_time(time)));
         }
     }
-    map
+    passages
 }
 
 impl From<&Value> for map::Point {
@@ -116,7 +128,7 @@ impl From<&Value> for Platform {
             .get(&HashableValue::String(String::from("point")))
             .unwrap_or(&Value::None)
             .into();
-        let routes = make_vec_of_i64(
+        let routes = make_vec_of_index(
             platform
                 .get(&HashableValue::String(String::from("routes")))
                 .unwrap_or(&Value::None),
@@ -141,7 +153,7 @@ impl From<&Value> for Route {
                 .get(&HashableValue::String(String::from("circle")))
                 .unwrap_or(&Value::None),
         );
-        let platforms = make_vec_of_i64(
+        let platforms = make_vec_of_index(
             route
                 .get(&HashableValue::String(String::from("platforms")))
                 .unwrap_or(&Value::None),
@@ -151,10 +163,16 @@ impl From<&Value> for Route {
                 .get(&HashableValue::String(String::from("trips")))
                 .unwrap_or(&Value::None),
         );
+        let ordinal = platforms
+            .iter()
+            .enumerate()
+            .map(|(index, platform)| (*platform, index))
+            .collect();
         Self {
             circle,
             platforms,
             trips,
+            ordinal,
         }
     }
 }
@@ -165,7 +183,7 @@ impl From<&Value> for PublicTransport {
         let fields = value_to_vec(&value, &default);
         let platforms = make_vec(fields.get(0).unwrap_or(&Value::None));
         let routes = make_vec(fields.get(1).unwrap_or(&Value::None));
-        let passages = make_map(fields.get(2).unwrap_or(&Value::None));
+        let passages = make_vec_of_passage(fields.get(2).unwrap_or(&Value::None), platforms.len());
         Self {
             platforms,
             routes,
@@ -189,7 +207,7 @@ fn parse_points(line: &String) -> (Point<f64>, Point<f64>) {
 }
 
 pub fn read_points(filename: &String) -> Vec<(Point<f64>, Point<f64>)> {
-    let mut points: Vec<(Point<f64>, Point<f64>)> = Vec::new();
+    let mut points = Vec::new();
     let file = File::open(filename).expect("Can not open points");
     for line in BufReader::new(file).lines().flatten() {
         points.push(parse_points(&line));

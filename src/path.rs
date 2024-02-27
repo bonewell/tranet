@@ -1,6 +1,6 @@
 use std::fmt;
 
-use geo_types::{Coord, Geometry, GeometryCollection, LineString, Point};
+use geo_types::{Coord, Geometry, GeometryCollection, LineString};
 use wkt::ToWkt;
 
 pub struct Part {
@@ -43,7 +43,7 @@ impl Path {
     }
 
     pub fn concat(&mut self, path: Path) {
-        self.parts.extend(path.parts.into_iter());
+        self.parts.extend(path.parts);
     }
 }
 
@@ -53,7 +53,7 @@ impl fmt::Display for Path {
         for part in &self.parts {
             let line = LineString::new(part.points.clone());
             collection.0.push(Geometry::LineString(line));
-            let point: Point<f64> = (*part.points.last().unwrap()).into();
+            let point = (*part.points.last().unwrap()).into();
             collection.0.push(Geometry::Point(point));
         }
         write!(f, "{}", collection.to_wkt())

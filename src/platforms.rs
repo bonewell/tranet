@@ -7,13 +7,14 @@ pub struct Platforms<'a> {
     zone: u8,
 }
 
+#[derive(Debug)]
 pub struct Walking {
     pub platform: usize,
-    pub duration: f64,
+    pub duration: i64,
 }
 
 impl Walking {
-    fn new(platform: usize, duration: f64) -> Self {
+    fn new(platform: usize, duration: i64) -> Self {
         Self { platform, duration }
     }
 }
@@ -55,10 +56,10 @@ fn is_near(lhs: &Point<f64>, rhs: &Point<f64>) -> bool {
     d2 < r * r
 }
 
-fn duration(from: &Point<f64>, to: &Point<f64>) -> f64 {
+fn duration(from: &Point<f64>, to: &Point<f64>) -> i64 {
     let dx = from.x() - to.x();
     let dy = from.y() - to.y();
     let d2 = dx * dx + dy * dy;
     let speed: f64 = 5000.0 / 3600.0;
-    d2.sqrt() / speed
+    (d2.sqrt() / speed).round() as i64
 }
