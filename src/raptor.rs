@@ -1,32 +1,49 @@
 use std::cmp::{self, Eq};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Local, Timelike};
 use geo_types::Coord;
 
-use crate::map::{Point, PublicTransport, Trip};
+use crate::map::{PlatformIndex, Point, PublicTransport, RouteIndex, Trip};
 use crate::path::{Part, Path};
 use crate::platforms::{Platforms, Walking};
+
+type GeoPoint = geo_types::Point<f64>;
 
 pub struct Raptor {
     map: PublicTransport,
 }
 
+impl Raptor {
+    pub fn new(map: PublicTransport) -> Self {
+        Self { map }
+    }
+
+    pub fn find_path(&self, start: GeoPoint, finish: GeoPoint) -> Vec<Path> {
+        let platforms = Platforms::new(&self.map.platforms, start, finish);
+        let mut searcher = Searcher::new(&self.map, platforms);
+        if searcher.ready() {
+            let paths = searcher.run();
+            return complete(paths, start, finish);
+        }
+        vec![]
+    }
+}
+
+type Marked = HashSet<PlatformIndex>;
+type Routes = HashMap<RouteIndex, PlatformIndex>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Label {
     arrival: i64,
-    from: Option<usize>,
-    route: Option<usize>,
+    from: Option<PlatformIndex>,
+    route: Option<RouteIndex>,
 }
 
 type Labels = Vec<Label>;
-type PlatformIndex = usize;
-type Marked = BTreeSet<PlatformIndex>;
-type RouteIndex = usize;
-type Routes = BTreeMap<RouteIndex, PlatformIndex>;
 
 impl Label {
-    pub fn new(arrival: i64, from: Option<usize>, route: Option<usize>) -> Self {
+    fn new(arrival: i64, from: Option<PlatformIndex>, route: Option<RouteIndex>) -> Self {
         Self {
             arrival,
             from,
@@ -34,7 +51,7 @@ impl Label {
         }
     }
 
-    pub fn infinity() -> Self {
+    fn infinity() -> Self {
         Self {
             arrival: i64::MAX,
             from: None,
@@ -43,55 +60,58 @@ impl Label {
     }
 }
 
-impl Raptor {
-    pub fn new(map: PublicTransport) -> Self {
-        Self { map }
-    }
+struct Searcher<'a> {
+    map: &'a PublicTransport,
+    platforms: Platforms,
+    arrival: i64,
+    best: Labels,
+    labels: Vec<Labels>,
+}
 
-    pub fn find_path(
-        &self,
-        start: geo_types::Point<f64>,
-        finish: geo_types::Point<f64>,
-    ) -> Vec<Path> {
-        let platforms = Platforms::new(&self.map.platforms, Platforms::zone(&start));
-        let from = platforms.find(&start);
-        let to = platforms.find(&finish);
-        if !from.is_empty() && !to.is_empty() {
-            let paths = self.run(from, to);
-            return complete(paths, start, finish);
+impl<'a> Searcher<'a> {
+    fn new(map: &'a PublicTransport, platforms: Platforms) -> Self {
+        Self {
+            map,
+            platforms,
+            arrival: i64::MAX,
+            best: vec![Label::infinity(); map.platforms.len()],
+            labels: vec![],
         }
-        vec![]
     }
 
-    fn run(&self, from: Vec<Walking>, to: Vec<Walking>) -> Vec<Path> {
+    fn ready(&self) -> bool {
+        !self.platforms.from.is_empty() && !self.platforms.to.is_empty()
+    }
+
+    fn run(&mut self) -> Vec<Path> {
         // let departure = Local::now().num_seconds_from_midnight() as i64;
         let departure = 11 * 60 * 60;
-        let (mut best, mut marked) = self.init(departure, &from);
-        let mut labels = vec![best.clone()];
+        let mut marked = self.init(departure);
         print!("Run: ");
-        let mut global_arrival = i64::MAX;
-        let mut k = 1;
-        while !marked.is_empty() && k < 700 {
-            print!(" {}", k);
-            labels.push(labels[k - 1].clone());
+        while !marked.is_empty() {
+            self.round(&marked);
             let routes = self.accumulate(marked);
-            marked = self.traverse(k, routes, &to, &mut best, &mut labels, &mut global_arrival);
-            marked.extend(self.transfer(&marked, &mut best, &mut labels[k]));
-            k += 1;
+            marked = self.traverse(routes);
+            marked.extend(self.transfer(&marked));
         }
         println!();
         println!("Get paths");
-        self.paths(from, to, labels, best)
+        self.paths()
     }
 
-    fn init(&self, departure: i64, from: &Vec<Walking>) -> (Labels, Marked) {
-        let mut best = vec![Label::infinity(); self.map.platforms.len()];
+    fn round(&mut self, marked: &Marked) {
+        print!(" {}-{}", self.labels.len(), marked.len());
+        self.labels.push(self.labels.last().unwrap().clone());
+    }
+
+    fn init(&mut self, departure: i64) -> Marked {
         let mut marked = Marked::new();
-        for w in from {
-            best[w.platform] = Label::new(departure + w.duration, None, None);
-            marked.insert(w.platform);
+        for (platform, duration) in &self.platforms.from {
+            self.best[*platform] = Label::new(departure + duration, None, None);
+            marked.insert(*platform);
         }
-        (best, marked)
+        self.labels = vec![self.best.clone()];
+        marked
     }
 
     fn accumulate(&self, marked: Marked) -> Routes {
@@ -111,15 +131,8 @@ impl Raptor {
         routes
     }
 
-    fn traverse(
-        &self,
-        round: usize,
-        routes: Routes,
-        to: &Vec<Walking>,
-        best: &mut Labels,
-        labels: &mut Vec<Labels>,
-        global_arrival: &mut i64,
-    ) -> Marked {
+    fn traverse(&mut self, routes: Routes) -> Marked {
+        let round = self.labels.len() - 1;
         let mut marked = Marked::new();
         for (r, p) in routes {
             let mut trip = None;
@@ -131,22 +144,16 @@ impl Raptor {
                 if trip.is_some() {
                     let trip: &Trip = trip.unwrap();
                     let arrival = trip.stops[pi_ordinal];
-                    // let minimal = labels[round][*pi].arrival;
-                    // let minimal = best[*pi].arrival;
-                    let minimal = cmp::min(best[*pi].arrival, *global_arrival);
-                    // let minimal = maximal(*pi, &to, &best);
+                    let minimal = self.labels[round][*pi].arrival;
+                    // let minimal = self.best[*pi].arrival;
+                    // Without local and target pruning
                     if arrival < minimal {
-                        best[*pi] = Label::new(arrival, Some(p), Some(r));
-                        labels[round][*pi] = best[*pi].clone();
+                        self.best[*pi] = Label::new(arrival, Some(p), Some(r));
+                        self.labels[round][*pi] = self.best[*pi].clone();
                         marked.insert(*pi);
-                        let w = find_to(*pi, to);
-                        if let Some(w) = w {
-                            *global_arrival = best[*pi].arrival + w.duration;
-                        }
                     }
                 }
-                let arrival = labels[round - 1][*pi].arrival;
-                // let arrival = best[*pi].arrival;
+                let arrival = self.labels[round - 1][*pi].arrival;
                 let earlier_trip = earlier_trip(arrival, ordinal, &route.trips);
                 if earlier_trip.is_some() && arrival <= earlier_trip.unwrap().stops[pi_ordinal] {
                     trip = earlier_trip
@@ -156,15 +163,16 @@ impl Raptor {
         marked
     }
 
-    fn transfer(&self, marked: &Marked, best: &mut Labels, labels: &mut Labels) -> Marked {
+    fn transfer(&mut self, marked: &Marked) -> Marked {
+        let round = self.labels.len() - 1;
+        let labels = &mut self.labels[round];
         let mut also_marked = Marked::new();
         for from in marked {
             for passage in &self.map.passages[*from] {
                 let minimal = labels[passage.to].arrival;
                 let arrival = labels[*from].arrival + passage.time;
                 if arrival < minimal {
-                    best[passage.to] = Label::new(arrival, Some(*from), None);
-                    labels[passage.to] = best[passage.to].clone();
+                    labels[passage.to] = Label::new(arrival, Some(*from), None);
                     also_marked.insert(passage.to);
                 }
             }
@@ -172,26 +180,21 @@ impl Raptor {
         also_marked
     }
 
-    fn paths(
-        &self,
-        from: Vec<Walking>,
-        to: Vec<Walking>,
-        round_labels: Vec<Labels>,
-        best: Labels,
-    ) -> Vec<Path> {
+    fn paths(&self) -> Vec<Path> {
         let mut paths: Vec<Path> = Vec::new();
         // for (k, labels) in round_labels.iter().enumerate() {
-        let labels = round_labels.last().unwrap();
-        // let labels = &best;
-        for t in &to {
-            if on_foot(labels, t.platform) {
+        // let labels = &self.labels[2];
+        // let labels = &self.labels.last().unwrap();
+        let labels = &self.best;
+        for (platform, _) in &self.platforms.to {
+            if on_foot(labels, *platform) {
                 continue;
             }
             // if k > 0 && is_similar(labels, &round_labels[k - 1], t.platform) {
             //     continue;
             // }
             let mut parts: Vec<Part> = vec![];
-            let mut finish = Some(t.platform);
+            let mut finish = Some(*platform);
             let mut start = labels[finish.unwrap()].from;
             while start.is_some() && finish.is_some() {
                 let from = start.unwrap();
@@ -200,7 +203,7 @@ impl Raptor {
                 finish = start;
                 start = labels[from].from;
             }
-            if finish.is_some() && is_from(finish.unwrap(), &from) {
+            if finish.is_some() && is_from(finish.unwrap(), &self.platforms.from) {
                 parts.reverse();
                 paths.push(Path::new(parts));
             }
@@ -209,7 +212,7 @@ impl Raptor {
         paths
     }
 
-    fn make_part(&self, from: usize, to: usize, route: Option<usize>) -> Part {
+    fn make_part(&self, from: PlatformIndex, to: PlatformIndex, route: Option<RouteIndex>) -> Part {
         let mut points = vec![];
         points.push(make_point(&self.map.platforms[from].point));
         if route.is_some() {
@@ -232,7 +235,7 @@ fn make_point(point: &Point) -> Coord<f64> {
     }
 }
 
-fn complete(paths: Vec<Path>, from: geo_types::Point<f64>, to: geo_types::Point<f64>) -> Vec<Path> {
+fn complete(paths: Vec<Path>, from: GeoPoint, to: GeoPoint) -> Vec<Path> {
     let from = from.into();
     let to = to.into();
     let mut completed = Vec::new();
@@ -267,32 +270,14 @@ fn earlier_trip<'a>(arrival: i64, ordinal: usize, trips: &'a Vec<Trip>) -> Optio
     trips.get(i)
 }
 
-fn minimal(pi: usize, to: &Vec<Walking>, best: &Labels) -> i64 {
-    let times: Vec<i64> = to.iter().map(|w| best[w.platform].arrival).collect();
-    cmp::min(best[pi].arrival, *times.iter().min().unwrap())
-}
-
-fn maximal(pi: usize, to: &Vec<Walking>, best: &Labels) -> i64 {
-    let times: Vec<i64> = to.iter().map(|w| best[w.platform].arrival).collect();
-    cmp::max(best[pi].arrival, *times.iter().min().unwrap())
-}
-
-fn on_foot(labels: &Labels, platform: usize) -> bool {
+fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
     labels[platform].route.is_none()
 }
 
-fn is_similar(lhs: &Labels, rhs: &Labels, platform: usize) -> bool {
+fn is_similar(lhs: &Labels, rhs: &Labels, platform: PlatformIndex) -> bool {
     lhs[platform] == rhs[platform]
 }
 
-fn is_from(platform: usize, from: &Vec<Walking>) -> bool {
-    from.iter().find(|w| w.platform == platform).is_some()
-}
-
-fn is_to(platform: usize, to: &Vec<Walking>) -> bool {
-    to.iter().find(|w| w.platform == platform).is_some()
-}
-
-fn find_to<'a>(platform: usize, to: &'a Vec<Walking>) -> Option<&'a Walking> {
-    to.iter().find(|w| w.platform == platform)
+fn is_from(platform: PlatformIndex, from: &Walking) -> bool {
+    from.contains_key(&platform)
 }

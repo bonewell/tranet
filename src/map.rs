@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+pub type PlatformIndex = usize;
+pub type RouteIndex = usize;
+
 #[derive(Debug)]
 pub struct Point {
     pub lat: f64,
@@ -9,7 +12,7 @@ pub struct Point {
 #[derive(Debug)]
 pub struct Platform {
     pub point: Point,
-    pub routes: Vec<usize>,
+    pub routes: Vec<RouteIndex>,
 }
 
 #[derive(Debug)]
@@ -20,25 +23,25 @@ pub struct Trip {
 #[derive(Debug)]
 pub struct Route {
     pub circle: bool,
-    pub platforms: Vec<usize>,
+    pub platforms: Vec<PlatformIndex>,
     pub trips: Vec<Trip>,
-    pub ordinal: HashMap<usize, usize>,
+    pub ordinal: HashMap<PlatformIndex, usize>,
 }
 
 impl Route {
-    pub fn before(&self, lhs: &usize, rhs: &usize) -> bool {
+    pub fn before(&self, lhs: &PlatformIndex, rhs: &PlatformIndex) -> bool {
         self.ordinal[&lhs] < self.ordinal[&rhs]
     }
 }
 
 #[derive(Debug)]
 pub struct Passage {
-    pub to: usize,
+    pub to: PlatformIndex,
     pub time: i64,
 }
 
 impl Passage {
-    pub fn new(to: usize, time: i64) -> Self {
+    pub fn new(to: PlatformIndex, time: i64) -> Self {
         Self { to, time }
     }
 }

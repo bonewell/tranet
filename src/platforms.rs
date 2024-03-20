@@ -1,51 +1,50 @@
+use std::collections::HashMap;
+
 use geo_types::Point;
 
-use crate::map::Platform;
+use crate::map::{Platform, PlatformIndex};
 
-pub struct Platforms<'a> {
-    platforms: &'a Vec<Platform>,
-    zone: u8,
+pub type Walking = HashMap<PlatformIndex, i64>;
+
+#[derive(Default)]
+pub struct Platforms {
+    pub from: Walking,
+    pub to: Walking,
 }
 
-#[derive(Debug)]
-pub struct Walking {
-    pub platform: usize,
-    pub duration: i64,
-}
-
-impl Walking {
-    fn new(platform: usize, duration: i64) -> Self {
-        Self { platform, duration }
+impl Platforms {
+    pub fn new(
+        platforms: &Vec<Platform>,
+        start: geo_types::Point<f64>,
+        finish: geo_types::Point<f64>,
+    ) -> Self {
+        let from = find(start, platforms);
+        let to = find(finish, platforms);
+        Self { from, to }
     }
 }
 
-impl<'a> Platforms<'a> {
-    pub fn new(platforms: &'a Vec<Platform>, zone: u8) -> Self {
-        Self { platforms, zone }
-    }
-
-    pub fn zone(point: &Point<f64>) -> u8 {
-        utm::lat_lon_to_zone_number(point.y(), point.x())
-    }
-
-    fn to_utm_point(&self, point: &Point<f64>) -> Point<f64> {
-        let (x, y, _) = utm::to_utm_wgs84(point.y(), point.x(), self.zone);
-        Point::new(x, y)
-    }
-
-    pub fn find(&self, point: &Point<f64>) -> Vec<Walking> {
-        let mut near = Vec::new();
-        let point = self.to_utm_point(point);
-        for (index, platform) in self.platforms.iter().enumerate() {
-            let platform = Point::new(platform.point.lon, platform.point.lat);
-            let platform = self.to_utm_point(&platform);
-            if is_near(&point, &platform) {
-                let walking = Walking::new(index, duration(&point, &platform));
-                near.push(walking);
-            }
+fn find(point: Point<f64>, platforms: &Vec<Platform>) -> Walking {
+    let zone = zone(&point);
+    let point = to_utm_point(&point, zone);
+    let mut near = Walking::new();
+    for (index, platform) in platforms.iter().enumerate() {
+        let platform = Point::new(platform.point.lon, platform.point.lat);
+        let platform = to_utm_point(&platform, zone);
+        if is_near(&point, &platform) {
+            near.insert(index, duration(&point, &platform));
         }
-        near
     }
+    near
+}
+
+fn zone(point: &Point<f64>) -> u8 {
+    utm::lat_lon_to_zone_number(point.y(), point.x())
+}
+
+fn to_utm_point(point: &Point<f64>, zone: u8) -> Point<f64> {
+    let (x, y, _) = utm::to_utm_wgs84(point.y(), point.x(), zone);
+    Point::new(x, y)
 }
 
 fn is_near(lhs: &Point<f64>, rhs: &Point<f64>) -> bool {
