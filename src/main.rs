@@ -20,7 +20,7 @@ fn main() {
     for (start, finish) in read_points(&args[2]) {
         for path in raptor.find_path(start, finish) {
             println!("{}", path);
-            println!();
         }
+        println!();
     }
 }
