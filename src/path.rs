@@ -3,17 +3,17 @@ use std::fmt;
 use geo_types::{Coord, Geometry, GeometryCollection, LineString};
 use wkt::ToWkt;
 
+use crate::map::{RouteIndex, Time};
+
+#[derive(Debug)]
 pub struct Part {
     points: Vec<Coord<f64>>,
-}
-
-pub struct Path {
-    parts: Vec<Part>,
+    route: Option<RouteIndex>,
 }
 
 impl Part {
-    pub fn new(points: Vec<Coord<f64>>) -> Self {
-        Self { points }
+    pub fn new(points: Vec<Coord<f64>>, route: Option<RouteIndex>) -> Self {
+        Self { points, route }
     }
 
     pub fn first(&self) -> &Coord<f64> {
@@ -25,9 +25,15 @@ impl Part {
     }
 }
 
+#[derive(Debug)]
+pub struct Path {
+    pub parts: Vec<Part>,
+    pub arrival: Time,
+}
+
 impl Path {
-    pub fn new(parts: Vec<Part>) -> Self {
-        Self { parts }
+    pub fn new(parts: Vec<Part>, arrival: Time) -> Self {
+        Self { parts, arrival }
     }
 
     pub fn first(&self) -> &Part {
@@ -37,20 +43,14 @@ impl Path {
     pub fn last(&self) -> &Part {
         self.parts.last().unwrap()
     }
-
-    pub fn push(&mut self, part: Part) {
-        self.parts.push(part);
-    }
-
-    pub fn concat(&mut self, path: Path) {
-        self.parts.extend(path.parts);
-    }
 }
 
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut routes = vec![];
         let mut collection = GeometryCollection::default();
         for part in &self.parts {
+            routes.push(part.route);
             let line = LineString::new(part.points.clone());
             collection.0.push(Geometry::LineString(line));
             let point = (*part.points.last().unwrap()).into();

@@ -95,23 +95,18 @@ impl<'a> Searcher<'a> {
     }
 
     fn run(&mut self) -> Vec<Path> {
-        // let departure = Local::now().num_seconds_from_midnight() as Time;
-        let departure = 11 * 60 * 60;
+        let departure = Local::now().num_seconds_from_midnight() as Time;
         let mut marked = self.init(departure);
-        print!("Run: ");
         while !marked.is_empty() {
-            self.round(&marked);
+            self.round();
             let routes = self.accumulate(marked);
             marked = self.traverse(routes);
             marked.extend(self.transfer(&marked));
         }
-        println!();
-        println!("Get paths");
         self.paths()
     }
 
-    fn round(&mut self, marked: &Marked) {
-        print!(" {}-{}", self.labels.len(), marked.len());
+    fn round(&mut self) {
         self.labels.push(self.labels.last().unwrap().clone());
     }
 
@@ -155,13 +150,7 @@ impl<'a> Searcher<'a> {
                 if let Some(boarding) = &boarding {
                     let arrival = boarding.trip.stops[pi_ordinal];
                     // With local and target pruning
-                    // let minimal = cmp::min(self.best[*pi].arrival, self.arrival);
-                    // With local pruning
-                    // let minimal = self.best[*pi].arrival;
-                    // With target pruning
-                    // let minimal = cmp::min(self.labels[round][*pi].arrival, self.arrival);
-                    // Without local and target pruning
-                    let minimal = self.labels[round][*pi].arrival;
+                    let minimal = cmp::min(self.best[*pi].arrival, self.arrival);
                     if arrival < minimal {
                         self.best[*pi] = Label::new(arrival, Some(boarding.platform), Some(r));
                         self.labels[round][*pi] = self.best[*pi].clone();
@@ -189,7 +178,8 @@ impl<'a> Searcher<'a> {
                 let minimal = labels[passage.to].arrival;
                 let arrival = labels[*from].arrival + passage.time;
                 if arrival < minimal {
-                    labels[passage.to] = Label::new(arrival, Some(*from), None);
+                    self.best[passage.to] = Label::new(arrival, Some(*from), None);
+                    labels[passage.to] = self.best[passage.to].clone();
                     also_marked.insert(passage.to);
                 }
             }
@@ -199,34 +189,39 @@ impl<'a> Searcher<'a> {
 
     fn paths(&self) -> Vec<Path> {
         let mut paths: Vec<Path> = Vec::new();
-        // for (k, labels) in round_labels.iter().enumerate() {
-        // let labels = &self.labels[2];
-        // let labels = &self.labels.last().unwrap();
-        let labels = &self.best;
-        for (platform, _) in &self.platforms.to {
-            if on_foot(labels, *platform) {
-                continue;
-            }
-            // if k > 0 && is_similar(labels, &round_labels[k - 1], t.platform) {
-            //     continue;
-            // }
-            let mut parts: Vec<Part> = vec![];
-            let mut finish = Some(*platform);
-            let mut start = labels[finish.unwrap()].from;
-            while start.is_some() && finish.is_some() {
-                let from = start.unwrap();
-                let to = finish.unwrap();
-                parts.push(self.make_part(from, to, labels[to].route));
-                finish = start;
-                start = labels[from].from;
-            }
-            if self.is_from(&finish) {
-                parts.reverse();
-                paths.push(Path::new(parts));
+        for (k, labels) in self.labels.iter().enumerate() {
+            for (platform, duration) in &self.platforms.to {
+                if k > 0 && is_similar(labels, &self.labels[k - 1], *platform) {
+                    continue;
+                }
+                if let Some(p) = self.unwind(labels, *platform, *duration) {
+                    paths.push(p);
+                }
             }
         }
-        // }
         paths
+    }
+
+    fn unwind(&self, labels: &Vec<Label>, platform: PlatformIndex, duration: Time) -> Option<Path> {
+        if on_foot(labels, platform) {
+            return None;
+        }
+        let mut parts: Vec<Part> = vec![];
+        let mut finish = Some(platform);
+        let mut start = labels[finish.unwrap()].from;
+        while start.is_some() && finish.is_some() {
+            let from = start.unwrap();
+            let to = finish.unwrap();
+            parts.push(self.make_part(from, to, labels[to].route));
+            finish = start;
+            start = labels[from].from;
+        }
+        if !self.is_from(&finish) {
+            return None;
+        }
+        let arrival = labels[platform].arrival + duration;
+        parts.reverse();
+        Some(Path::new(parts, arrival))
     }
 
     fn make_part(&self, from: PlatformIndex, to: PlatformIndex, route: Option<RouteIndex>) -> Part {
@@ -241,7 +236,7 @@ impl<'a> Searcher<'a> {
             }
         }
         points.push(make_point(&self.map.platforms[to].point));
-        Part::new(points)
+        Part::new(points, route)
     }
 
     fn update(&mut self, platform: &PlatformIndex, arrival: Time) {
@@ -269,27 +264,28 @@ fn complete(paths: Vec<Path>, from: GeoPoint, to: GeoPoint) -> Vec<Path> {
     for path in paths {
         completed.push(make_path(&from, &to, path));
     }
+    completed.sort_by(|a, b| a.arrival.cmp(&b.arrival));
     completed
 }
 
 fn make_first_walking(from: &Coord<f64>, path: &Path) -> Part {
     let first = path.first().first();
-    Part::new(vec![*from, *first])
+    Part::new(vec![*from, *first], None)
 }
 
 fn make_last_walking(to: &Coord<f64>, path: &Path) -> Part {
     let last = path.last().last();
-    Part::new(vec![*last, *to])
+    Part::new(vec![*last, *to], None)
 }
 
 fn make_path(from: &Coord<f64>, to: &Coord<f64>, path: Path) -> Path {
     let first = make_first_walking(&from, &path);
     let last = make_last_walking(&to, &path);
-
-    let mut completed = Path::new(vec![first]);
-    completed.concat(path);
-    completed.push(last);
-    completed
+    let mut parts = vec![];
+    parts.push(first);
+    parts.extend(path.parts);
+    parts.push(last);
+    Path::new(parts, path.arrival)
 }
 
 fn try_catch<'a>(
