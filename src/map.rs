@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-pub type PlatformIndex = usize;
+pub type Time = i64;
 pub type RouteIndex = usize;
+pub type PlatformIndex = usize;
+pub type SequenceNumber = usize;
 
 #[derive(Debug)]
 pub struct Point {
@@ -17,7 +19,7 @@ pub struct Platform {
 
 #[derive(Debug)]
 pub struct Trip {
-    pub stops: Vec<i64>,
+    pub stops: Vec<Time>,
 }
 
 #[derive(Debug)]
@@ -25,7 +27,7 @@ pub struct Route {
     pub circle: bool,
     pub platforms: Vec<PlatformIndex>,
     pub trips: Vec<Trip>,
-    pub ordinal: HashMap<PlatformIndex, usize>,
+    pub ordinal: HashMap<PlatformIndex, SequenceNumber>,
 }
 
 impl Route {
@@ -37,11 +39,11 @@ impl Route {
 #[derive(Debug)]
 pub struct Passage {
     pub to: PlatformIndex,
-    pub time: i64,
+    pub time: Time,
 }
 
 impl Passage {
-    pub fn new(to: PlatformIndex, time: i64) -> Self {
+    pub fn new(to: PlatformIndex, time: Time) -> Self {
         Self { to, time }
     }
 }

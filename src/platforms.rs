@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use geo_types::Point;
 
-use crate::map::{Platform, PlatformIndex};
+use crate::map::{Platform, PlatformIndex, Time};
 
-pub type Walking = HashMap<PlatformIndex, i64>;
+pub type Walking = HashMap<PlatformIndex, Time>;
 
 #[derive(Default)]
 pub struct Platforms {
@@ -55,10 +55,10 @@ fn is_near(lhs: &Point<f64>, rhs: &Point<f64>) -> bool {
     d2 < r * r
 }
 
-fn duration(from: &Point<f64>, to: &Point<f64>) -> i64 {
+fn duration(from: &Point<f64>, to: &Point<f64>) -> Time {
     let dx = from.x() - to.x();
     let dy = from.y() - to.y();
     let d2 = dx * dx + dy * dy;
     let speed: f64 = 5000.0 / 3600.0;
-    (d2.sqrt() / speed).round() as i64
+    (d2.sqrt() / speed).round() as Time
 }

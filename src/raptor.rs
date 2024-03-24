@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Local, Timelike};
 use geo_types::Coord;
 
-use crate::map::{PlatformIndex, Point, PublicTransport, RouteIndex, Trip};
+use crate::map::{PlatformIndex, Point, PublicTransport, Route, RouteIndex, Time, Trip};
 use crate::path::{Part, Path};
-use crate::platforms::{Platforms, Walking};
+use crate::platforms::Platforms;
 
 type GeoPoint = geo_types::Point<f64>;
 
@@ -35,7 +35,7 @@ type Routes = HashMap<RouteIndex, PlatformIndex>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Label {
-    arrival: i64,
+    arrival: Time,
     from: Option<PlatformIndex>,
     route: Option<RouteIndex>,
 }
@@ -43,7 +43,7 @@ struct Label {
 type Labels = Vec<Label>;
 
 impl Label {
-    fn new(arrival: i64, from: Option<PlatformIndex>, route: Option<RouteIndex>) -> Self {
+    fn new(arrival: Time, from: Option<PlatformIndex>, route: Option<RouteIndex>) -> Self {
         Self {
             arrival,
             from,
@@ -53,17 +53,28 @@ impl Label {
 
     fn infinity() -> Self {
         Self {
-            arrival: i64::MAX,
+            arrival: Time::MAX,
             from: None,
             route: None,
         }
     }
 }
 
+struct Boarding<'a> {
+    platform: PlatformIndex,
+    trip: &'a Trip,
+}
+
+impl<'a> Boarding<'a> {
+    fn new(platform: PlatformIndex, trip: &'a Trip) -> Self {
+        Self { platform, trip }
+    }
+}
+
 struct Searcher<'a> {
     map: &'a PublicTransport,
     platforms: Platforms,
-    arrival: i64,
+    arrival: Time,
     best: Labels,
     labels: Vec<Labels>,
 }
@@ -73,7 +84,7 @@ impl<'a> Searcher<'a> {
         Self {
             map,
             platforms,
-            arrival: i64::MAX,
+            arrival: Time::MAX,
             best: vec![Label::infinity(); map.platforms.len()],
             labels: vec![],
         }
@@ -84,7 +95,7 @@ impl<'a> Searcher<'a> {
     }
 
     fn run(&mut self) -> Vec<Path> {
-        // let departure = Local::now().num_seconds_from_midnight() as i64;
+        // let departure = Local::now().num_seconds_from_midnight() as Time;
         let departure = 11 * 60 * 60;
         let mut marked = self.init(departure);
         print!("Run: ");
@@ -104,7 +115,7 @@ impl<'a> Searcher<'a> {
         self.labels.push(self.labels.last().unwrap().clone());
     }
 
-    fn init(&mut self, departure: i64) -> Marked {
+    fn init(&mut self, departure: Time) -> Marked {
         let mut marked = Marked::new();
         for (platform, duration) in &self.platforms.from {
             self.best[*platform] = Label::new(departure + duration, None, None);
@@ -135,28 +146,34 @@ impl<'a> Searcher<'a> {
         let round = self.labels.len() - 1;
         let mut marked = Marked::new();
         for (r, p) in routes {
-            let mut trip = None;
+            let mut boarding: Option<Boarding> = None;
             let route = &self.map.routes[r];
             let ordinal = route.ordinal[&p];
+            // TODO - closed routes?
             for pi in &route.platforms[ordinal..] {
-                // TODO - closed routes?
                 let pi_ordinal = route.ordinal[pi];
-                if trip.is_some() {
-                    let trip: &Trip = trip.unwrap();
-                    let arrival = trip.stops[pi_ordinal];
-                    let minimal = self.labels[round][*pi].arrival;
+                if let Some(boarding) = &boarding {
+                    let arrival = boarding.trip.stops[pi_ordinal];
+                    // With local and target pruning
+                    // let minimal = cmp::min(self.best[*pi].arrival, self.arrival);
+                    // With local pruning
                     // let minimal = self.best[*pi].arrival;
+                    // With target pruning
+                    // let minimal = cmp::min(self.labels[round][*pi].arrival, self.arrival);
                     // Without local and target pruning
+                    let minimal = self.labels[round][*pi].arrival;
                     if arrival < minimal {
-                        self.best[*pi] = Label::new(arrival, Some(p), Some(r));
+                        self.best[*pi] = Label::new(arrival, Some(boarding.platform), Some(r));
                         self.labels[round][*pi] = self.best[*pi].clone();
                         marked.insert(*pi);
+                        self.update(pi, arrival);
                     }
                 }
                 let arrival = self.labels[round - 1][*pi].arrival;
-                let earlier_trip = earlier_trip(arrival, ordinal, &route.trips);
-                if earlier_trip.is_some() && arrival <= earlier_trip.unwrap().stops[pi_ordinal] {
-                    trip = earlier_trip
+                boarding = match boarding {
+                    None => try_catch(arrival, pi, route),
+                    Some(b) if arrival < b.trip.stops[pi_ordinal] => try_catch(arrival, pi, route),
+                    _ => boarding,
                 }
             }
         }
@@ -203,7 +220,7 @@ impl<'a> Searcher<'a> {
                 finish = start;
                 start = labels[from].from;
             }
-            if finish.is_some() && is_from(finish.unwrap(), &self.platforms.from) {
+            if self.is_from(&finish) {
                 parts.reverse();
                 paths.push(Path::new(parts));
             }
@@ -225,6 +242,16 @@ impl<'a> Searcher<'a> {
         }
         points.push(make_point(&self.map.platforms[to].point));
         Part::new(points)
+    }
+
+    fn update(&mut self, platform: &PlatformIndex, arrival: Time) {
+        if let Some(duration) = self.platforms.to.get(platform) {
+            self.arrival = arrival + duration;
+        }
+    }
+
+    fn is_from(&self, platform: &Option<PlatformIndex>) -> bool {
+        platform.is_some() && self.platforms.from.contains_key(&platform.unwrap())
     }
 }
 
@@ -265,9 +292,19 @@ fn make_path(from: &Coord<f64>, to: &Coord<f64>, path: Path) -> Path {
     completed
 }
 
-fn earlier_trip<'a>(arrival: i64, ordinal: usize, trips: &'a Vec<Trip>) -> Option<&'a Trip> {
-    let i = trips.partition_point(|t| t.stops[ordinal] < arrival);
-    trips.get(i)
+fn try_catch<'a>(
+    departure: Time,
+    platform: &PlatformIndex,
+    route: &'a Route,
+) -> Option<Boarding<'a>> {
+    let ordinal = route.ordinal[platform];
+    let i = route
+        .trips
+        .partition_point(|t| t.stops[ordinal] < departure);
+    match route.trips.get(i) {
+        Some(trip) => Some(Boarding::new(*platform, &trip)),
+        _ => None,
+    }
 }
 
 fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
@@ -276,8 +313,4 @@ fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
 
 fn is_similar(lhs: &Labels, rhs: &Labels, platform: PlatformIndex) -> bool {
     lhs[platform] == rhs[platform]
-}
-
-fn is_from(platform: PlatformIndex, from: &Walking) -> bool {
-    from.contains_key(&platform)
 }
