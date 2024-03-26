@@ -116,7 +116,7 @@ impl From<&Value> for map::Point {
                 .get(&HashableValue::String(String::from("lon")))
                 .unwrap_or(&Value::None),
         );
-        Self { lat, lon }
+        map::Point::new(lat, lon)
     }
 }
 
@@ -133,14 +133,14 @@ impl From<&Value> for Platform {
                 .get(&HashableValue::String(String::from("routes")))
                 .unwrap_or(&Value::None),
         );
-        Self { point, routes }
+        Platform::new(point, routes)
     }
 }
 
 impl From<&Value> for Trip {
     fn from(value: &Value) -> Self {
         let stops = make_vec_of_i64(&value);
-        Self { stops }
+        Trip::new(stops)
     }
 }
 
@@ -163,17 +163,7 @@ impl From<&Value> for Route {
                 .get(&HashableValue::String(String::from("trips")))
                 .unwrap_or(&Value::None),
         );
-        let ordinal = platforms
-            .iter()
-            .enumerate()
-            .map(|(index, platform)| (*platform, index))
-            .collect();
-        Self {
-            circle,
-            platforms,
-            trips,
-            ordinal,
-        }
+        Route::new(circle, platforms, trips)
     }
 }
 

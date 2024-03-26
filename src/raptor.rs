@@ -310,3 +310,124 @@ fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
 fn is_similar(lhs: &Labels, rhs: &Labels, platform: PlatformIndex) -> bool {
     lhs[platform] == rhs[platform]
 }
+
+#[cfg(test)]
+mod labels {
+    use super::*;
+
+    #[test]
+    fn similar_infinity() {
+        let lhs = vec![Label::infinity()];
+        let rhs = vec![Label::infinity()];
+        assert!(is_similar(&lhs, &rhs, 0));
+    }
+
+    #[test]
+    fn similar() {
+        let lhs = vec![Label::new(34, Some(2), Some(8))];
+        let rhs = vec![Label::new(34, Some(2), Some(8))];
+        assert!(is_similar(&lhs, &rhs, 0));
+    }
+
+    #[test]
+    fn different_route() {
+        let lhs = vec![Label::new(34, Some(2), Some(1))];
+        let rhs = vec![Label::new(34, Some(2), Some(8))];
+        assert!(!is_similar(&lhs, &rhs, 0));
+    }
+
+    #[test]
+    fn different_platform() {
+        let lhs = vec![Label::new(34, Some(2), Some(8))];
+        let rhs = vec![Label::new(34, Some(3), Some(8))];
+        assert!(!is_similar(&lhs, &rhs, 0));
+    }
+
+    #[test]
+    fn different_time() {
+        let lhs = vec![Label::new(34, Some(2), Some(8))];
+        let rhs = vec![Label::new(67, Some(2), Some(8))];
+        assert!(!is_similar(&lhs, &rhs, 0));
+    }
+
+    #[test]
+    fn different() {
+        let lhs = vec![Label::new(34, Some(2), Some(8))];
+        let rhs = vec![Label::new(67, Some(3), Some(1))];
+        assert!(!is_similar(&lhs, &rhs, 0));
+    }
+}
+
+#[cfg(test)]
+mod utils {
+    use crate::{map::Route, map::Trip, raptor::try_catch};
+
+    fn route() -> Route {
+        let trips = vec![
+            Trip::new(vec![10, 60, 70]),
+            Trip::new(vec![30, 90, 100]),
+            Trip::new(vec![50, 110, 120]),
+        ];
+        Route::new(false, vec![0, 1, 2], trips)
+    }
+
+    #[test]
+    fn no_trip() {
+        let route = route();
+        let boarding = try_catch(60, &0, &route);
+        assert!(boarding.is_none());
+    }
+
+    #[test]
+    fn catch_trip() {
+        let route = route();
+        let boarding = try_catch(70, &1, &route);
+        assert!(boarding.is_some());
+        assert_eq!(90, boarding.unwrap().trip.stops[1]);
+    }
+}
+
+#[cfg(test)]
+mod searcher {
+    use crate::{
+        map::{Platform, Point, PublicTransport, Route},
+        platforms::Platforms,
+        raptor::{Marked, Routes, Searcher},
+    };
+
+    fn platforms() -> Vec<Platform> {
+        let mut platforms = vec![];
+        for _ in 0..10 {
+            platforms.push(Platform::new(Point::new(0.0, 0.0), vec![0]))
+        }
+        for _ in 0..10 {
+            platforms.push(Platform::new(Point::new(0.0, 0.0), vec![1]))
+        }
+        platforms
+    }
+
+    fn routes() -> Vec<Route> {
+        vec![
+            Route::new(false, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], vec![]),
+            Route::new(false, vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19], vec![]),
+        ]
+    }
+
+    fn map() -> PublicTransport {
+        PublicTransport {
+            platforms: platforms(),
+            routes: routes(),
+            passages: vec![],
+        }
+    }
+
+    #[test]
+    fn accumulate_routes() {
+        let map = map();
+        let platforms = Platforms::default();
+        let searcher = Searcher::new(&map, platforms);
+        let marked = Marked::from([11, 5, 2, 14]);
+        let expected = Routes::from([(0, 2), (1, 11)]);
+        assert_eq!(expected, searcher.accumulate(marked));
+    }
+}

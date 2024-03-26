@@ -62,3 +62,31 @@ fn duration(from: &Point<f64>, to: &Point<f64>) -> Time {
     let speed: f64 = 5000.0 / 3600.0;
     (d2.sqrt() / speed).round() as Time
 }
+
+#[cfg(test)]
+mod point {
+    use geo_types::coord;
+
+    use crate::platforms::{duration, is_near};
+
+    #[test]
+    fn near() {
+        let lhs = coord! { x: 5.0, y: 5.0 };
+        let rhs = coord! { x: 1000.0, y: 5.0 };
+        assert!(is_near(&lhs.into(), &rhs.into()));
+    }
+
+    #[test]
+    fn far() {
+        let lhs = coord! { x: 5.0, y: 5.0 };
+        let rhs = coord! { x: 1005.0, y: 5.0 };
+        assert!(!is_near(&lhs.into(), &rhs.into()));
+    }
+
+    #[test]
+    fn calc_duration() {
+        let lhs = coord! { x: 5.0, y: 5.0 };
+        let rhs = coord! { x: 1005.0, y: 5.0 };
+        assert_eq!(720, duration(&lhs.into(), &rhs.into()));
+    }
+}
