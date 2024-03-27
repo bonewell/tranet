@@ -65,9 +65,9 @@ fn duration(from: &Point<f64>, to: &Point<f64>) -> Time {
 
 #[cfg(test)]
 mod point {
-    use geo_types::coord;
+    use super::*;
 
-    use crate::platforms::{duration, is_near};
+    use geo_types::coord;
 
     #[test]
     fn near() {

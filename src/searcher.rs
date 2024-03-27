@@ -307,7 +307,7 @@ mod labels {
 
 #[cfg(test)]
 mod utils {
-    use crate::{map::Route, map::Trip, searcher::try_catch};
+    use super::*;
 
     fn route() -> Route {
         let trips = vec![
@@ -336,10 +336,11 @@ mod utils {
 
 #[cfg(test)]
 mod searcher {
+    use super::*;
+
     use crate::{
-        map::{Passage, Platform, Point, PublicTransport, Route},
+        map::{Passage, Platform},
         platforms::Platforms,
-        searcher::{Label, Marked, Routes, Searcher},
     };
 
     fn platforms() -> Vec<Platform> {
@@ -355,8 +356,16 @@ mod searcher {
 
     fn routes() -> Vec<Route> {
         vec![
-            Route::new(false, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], vec![]),
-            Route::new(false, vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19], vec![]),
+            Route::new(
+                false,
+                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                vec![Trip::new(vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65])],
+            ),
+            Route::new(
+                false,
+                vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+                vec![Trip::new(vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70])],
+            ),
         ]
     }
 
@@ -399,5 +408,23 @@ mod searcher {
         searcher.labels[0][2].arrival = 10;
         searcher.labels[0][15].arrival = 15;
         assert_eq!(expected, searcher.transfer(&marked));
+    }
+
+    #[test]
+    fn do_traverse() {
+        let map = map();
+        let platforms = Platforms::default();
+        let mut searcher = Searcher::new(&map, platforms);
+        let routes = Routes::from([(0, 2), (1, 11)]);
+        let expected = Marked::from([3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 17]);
+        searcher.best = vec![Label::infinity(); 20];
+        searcher.best[2].arrival = 10;
+        searcher.best[11].arrival = 15;
+        searcher.best[8].arrival = 20;
+        searcher.best[9].arrival = 30;
+        searcher.best[18].arrival = 25;
+        searcher.best[19].arrival = 35;
+        searcher.labels = vec![searcher.best.clone(); 2];
+        assert_eq!(expected, searcher.traverse(routes));
     }
 }
