@@ -5,6 +5,7 @@ mod path;
 mod platforms;
 mod raptor;
 mod reader;
+mod searcher;
 
 use crate::raptor::Raptor;
 use crate::reader::{read_map, read_points};
