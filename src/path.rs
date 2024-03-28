@@ -5,7 +5,7 @@ use wkt::ToWkt;
 
 use crate::map::{RouteIndex, Time};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Part {
     points: Vec<Coord<f64>>,
     route: Option<RouteIndex>,
@@ -25,7 +25,7 @@ impl Part {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Path {
     pub parts: Vec<Part>,
     pub arrival: Time,

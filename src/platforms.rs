@@ -22,6 +22,13 @@ impl Platforms {
         let to = find(finish, platforms);
         Self { from, to }
     }
+
+    pub fn from(start: Walking, finish: Walking) -> Self {
+        Self {
+            from: start,
+            to: finish,
+        }
+    }
 }
 
 fn find(point: Point<f64>, platforms: &Vec<Platform>) -> Walking {

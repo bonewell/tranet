@@ -1,7 +1,6 @@
 use std::cmp::{self, Eq};
 use std::collections::{HashMap, HashSet};
 
-use chrono::{Local, Timelike};
 use geo_types::Coord;
 
 use crate::map::{PlatformIndex, Point, PublicTransport, Route, RouteIndex, Time, Trip};
@@ -72,8 +71,7 @@ impl<'a> Searcher<'a> {
         !self.platforms.from.is_empty() && !self.platforms.to.is_empty()
     }
 
-    pub fn run(&mut self) -> Vec<Path> {
-        let departure = Local::now().num_seconds_from_midnight() as Time;
+    pub fn run(&mut self, departure: Time) -> Vec<Path> {
         let mut marked = self.init(departure);
         while !marked.is_empty() {
             self.round();
@@ -204,7 +202,6 @@ impl<'a> Searcher<'a> {
 
     fn make_part(&self, from: PlatformIndex, to: PlatformIndex, route: Option<RouteIndex>) -> Part {
         let mut points = vec![];
-        points.push(make_point(&self.map.platforms[from].point));
         if route.is_some() {
             let route = &self.map.routes[route.unwrap()];
             let from = route.ordinal[&from];
@@ -213,7 +210,6 @@ impl<'a> Searcher<'a> {
                 points.push(make_point(&self.map.platforms[*p].point));
             }
         }
-        points.push(make_point(&self.map.platforms[to].point));
         Part::new(points, route)
     }
 

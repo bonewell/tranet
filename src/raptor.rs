@@ -1,6 +1,8 @@
 use geo_types::Coord;
 
-use crate::map::PublicTransport;
+use chrono::{Local, Timelike};
+
+use crate::map::{PublicTransport, Time};
 use crate::path::{Part, Path};
 use crate::platforms::Platforms;
 use crate::searcher::Searcher;
@@ -17,10 +19,11 @@ impl Raptor {
     }
 
     pub fn find_path(&self, start: GeoPoint, finish: GeoPoint) -> Vec<Path> {
+        let departure = Local::now().num_seconds_from_midnight() as Time;
         let platforms = Platforms::new(&self.map.platforms, start, finish);
         let mut searcher = Searcher::new(&self.map, platforms);
         if searcher.ready() {
-            let paths = searcher.run();
+            let paths = searcher.run(departure);
             return complete(paths, start, finish);
         }
         vec![]

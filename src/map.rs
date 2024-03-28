@@ -5,7 +5,7 @@ pub type RouteIndex = usize;
 pub type PlatformIndex = usize;
 pub type SequenceNumber = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Point {
     pub lat: f64,
     pub lon: f64,
@@ -85,4 +85,14 @@ pub struct PublicTransport {
     pub platforms: Vec<Platform>,
     pub routes: Vec<Route>,
     pub passages: Vec<Vec<Passage>>,
+}
+
+impl PublicTransport {
+    pub fn new(platforms: Vec<Platform>, routes: Vec<Route>, passages: Vec<Vec<Passage>>) -> Self {
+        Self {
+            platforms,
+            routes,
+            passages,
+        }
+    }
 }
