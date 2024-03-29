@@ -209,6 +209,9 @@ impl<'a> Searcher<'a> {
             for p in &route.platforms[from..=to] {
                 points.push(make_point(&self.map.platforms[*p].point));
             }
+        } else {
+            points.push(make_point(&self.map.platforms[from].point));
+            points.push(make_point(&self.map.platforms[to].point));
         }
         Part::new(points, route)
     }

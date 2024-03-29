@@ -68,7 +68,7 @@ impl Route {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Passage {
     pub to: PlatformIndex,
     pub time: Time,
