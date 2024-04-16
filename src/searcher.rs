@@ -134,15 +134,30 @@ impl<'a> Searcher<'a> {
                         self.update(pi, arrival);
                     }
                 }
-                let arrival = self.labels[round - 1][*pi].arrival;
-                boarding = match boarding {
-                    None => try_catch(arrival, pi, route),
-                    Some(b) if arrival < b.trip.stops[pi_ordinal] => try_catch(arrival, pi, route),
-                    _ => boarding,
+                let trip = self.try_catch(*pi, route, &boarding);
+                if let Some(trip) = trip {
+                    boarding = match &boarding {
+                        Some(b) if trip == b.trip => boarding,
+                        _ => Some(Boarding::new(*pi, trip)),
+                    };
                 }
             }
         }
         marked
+    }
+
+    fn try_catch(
+        &self,
+        platform: PlatformIndex,
+        route: &'a Route,
+        boarding: &Option<Boarding>,
+    ) -> Option<&'a Trip> {
+        let arrival = self.best[platform].arrival;
+        let ordinal = route.ordinal[&platform];
+        return match boarding {
+            Some(b) if !(arrival < b.trip.stops[ordinal]) => None,
+            _ => next_trip(arrival, platform, route),
+        };
     }
 
     fn transfer(&mut self, marked: &Marked) -> Marked {
@@ -234,19 +249,10 @@ fn make_point(point: &Point) -> Coord<f64> {
     }
 }
 
-fn try_catch<'a>(
-    departure: Time,
-    platform: &PlatformIndex,
-    route: &'a Route,
-) -> Option<Boarding<'a>> {
-    let ordinal = route.ordinal[platform];
-    let i = route
-        .trips
-        .partition_point(|t| t.stops[ordinal] < departure);
-    match route.trips.get(i) {
-        Some(trip) => Some(Boarding::new(*platform, &trip)),
-        _ => None,
-    }
+fn next_trip<'a>(time: Time, platform: PlatformIndex, route: &'a Route) -> Option<&'a Trip> {
+    let ordinal = route.ordinal[&platform];
+    let i = route.trips.partition_point(|t| t.stops[ordinal] < time);
+    route.trips.get(i)
 }
 
 fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
@@ -320,16 +326,16 @@ mod utils {
     #[test]
     fn no_trip() {
         let route = route();
-        let boarding = try_catch(60, &0, &route);
-        assert!(boarding.is_none());
+        let trip = next_trip(60, 0, &route);
+        assert!(trip.is_none());
     }
 
     #[test]
-    fn catch_trip() {
+    fn yes_trip() {
         let route = route();
-        let boarding = try_catch(70, &1, &route);
-        assert!(boarding.is_some());
-        assert_eq!(90, boarding.unwrap().trip.stops[1]);
+        let trip = next_trip(70, 1, &route);
+        assert!(trip.is_some());
+        assert_eq!(90, trip.unwrap().stops[1]);
     }
 }
 

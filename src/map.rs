@@ -32,11 +32,23 @@ impl Platform {
 #[derive(Debug)]
 pub struct Trip {
     pub stops: Vec<Time>,
+    id: i32,
 }
 
 impl Trip {
     pub fn new(stops: Vec<Time>) -> Self {
-        Self { stops }
+        static mut ID: i32 = 0;
+        unsafe {
+            let id = ID;
+            ID += 1;
+            Self { stops, id }
+        }
+    }
+}
+
+impl PartialEq for Trip {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
@@ -94,5 +106,18 @@ impl PublicTransport {
             routes,
             passages,
         }
+    }
+}
+
+#[cfg(test)]
+mod trip {
+    use super::*;
+
+    #[test]
+    fn new_trip() {
+        let trip1 = Trip::new(vec![]);
+        let _ = Trip::new(vec![]);
+        let trip3 = Trip::new(vec![]);
+        assert_eq!(trip1.id + 2, trip3.id);
     }
 }
