@@ -31,18 +31,13 @@ impl Platform {
 
 #[derive(Debug)]
 pub struct Trip {
-    pub stops: Vec<Time>,
     id: i32,
+    pub stops: Vec<Time>,
 }
 
 impl Trip {
-    pub fn new(stops: Vec<Time>) -> Self {
-        static mut ID: i32 = 0;
-        unsafe {
-            let id = ID;
-            ID += 1;
-            Self { stops, id }
-        }
+    pub fn new(id: i32, stops: Vec<Time>) -> Self {
+        Self { id, stops }
     }
 }
 
@@ -54,9 +49,9 @@ impl PartialEq for Trip {
 
 #[derive(Debug)]
 pub struct Route {
-    pub circle: bool,
-    pub platforms: Vec<PlatformIndex>,
-    pub trips: Vec<Trip>,
+    circle: bool,
+    platforms: Vec<PlatformIndex>,
+    trips: Vec<Trip>,
     pub ordinal: HashMap<PlatformIndex, SequenceNumber>,
 }
 
@@ -75,8 +70,65 @@ impl Route {
         }
     }
 
-    pub fn before(&self, lhs: &PlatformIndex, rhs: &PlatformIndex) -> bool {
+    pub fn is_before(&self, lhs: &PlatformIndex, rhs: &PlatformIndex) -> bool {
         self.ordinal[&lhs] < self.ordinal[&rhs]
+    }
+
+    pub fn is_seam(&self, platform: &PlatformIndex) -> bool {
+        self.circle && platform == self.platforms.last().unwrap()
+    }
+
+    fn next_trip(&self, time: Time, platform: &PlatformIndex) -> Option<&Trip> {
+        let ordinal = self.ordinal[platform];
+        let i = self.trips.partition_point(|t| t.stops[ordinal] < time);
+        self.trips.get(i)
+    }
+
+    fn next_circle_trip(&self, current_trip: &Trip) -> Option<&Trip> {
+        let arrival = *current_trip.stops.last().unwrap();
+        let platform = self.platforms.first().unwrap();
+        self.next_trip(arrival, platform)
+    }
+
+    fn move_on(&self, arrival: Time, platform: &PlatformIndex, trip: &Trip) -> bool {
+        let ordinal = self.ordinal[platform];
+        let next_circle = self.is_seam(platform);
+        let was_here_earlier = arrival < trip.stops[ordinal];
+        !next_circle && !was_here_earlier
+    }
+
+    pub fn try_catch(
+        &self,
+        time: Time,
+        platform: &PlatformIndex,
+        trip: Option<&Trip>,
+    ) -> Option<&Trip> {
+        if let Some(trip) = trip {
+            if self.move_on(time, platform, trip) {
+                return None;
+            }
+            if self.is_seam(platform) {
+                return self.next_circle_trip(trip);
+            }
+        }
+        self.next_trip(time, platform)
+    }
+
+    pub fn range(&self, from: PlatformIndex, to: PlatformIndex) -> Vec<PlatformIndex> {
+        let from = self.ordinal[&from];
+        let to = self.ordinal[&to];
+        match self.circle {
+            true if from > to => [&self.platforms[from..], &self.platforms[..=to]].concat(),
+            _ => self.platforms[from..=to].to_vec(),
+        }
+    }
+
+    pub fn tail(&self, from: PlatformIndex) -> Vec<PlatformIndex> {
+        let ordinal = self.ordinal[&from];
+        match self.circle {
+            true => [&self.platforms[ordinal..], &self.platforms[..ordinal]].concat(),
+            false => self.platforms[ordinal..].to_vec(),
+        }
     }
 }
 
@@ -113,11 +165,27 @@ impl PublicTransport {
 mod trip {
     use super::*;
 
+    fn route() -> Route {
+        let trips = vec![
+            Trip::new(1, vec![10, 60, 70]),
+            Trip::new(2, vec![30, 90, 100]),
+            Trip::new(3, vec![50, 110, 120]),
+        ];
+        Route::new(false, vec![0, 1, 2], trips)
+    }
+
     #[test]
-    fn new_trip() {
-        let trip1 = Trip::new(vec![]);
-        let _ = Trip::new(vec![]);
-        let trip3 = Trip::new(vec![]);
-        assert_eq!(trip1.id + 2, trip3.id);
+    fn no_trip() {
+        let route = route();
+        let trip = route.next_trip(60, &0);
+        assert!(trip.is_none());
+    }
+
+    #[test]
+    fn yes_trip() {
+        let route = route();
+        let trip = route.next_trip(70, &1);
+        assert!(trip.is_some());
+        assert_eq!(90, trip.unwrap().stops[1]);
     }
 }

@@ -101,11 +101,8 @@ impl<'a> Searcher<'a> {
         for mp in marked {
             for r in &self.map.platforms[mp].routes {
                 let route = &self.map.routes[*r];
-                if route.circle {
-                    continue;
-                }
                 let op = routes.get(r);
-                if op.is_none() || route.before(&mp, op.unwrap()) {
+                if op.is_none() || route.is_before(&mp, op.unwrap()) {
                     routes.insert(*r, mp);
                 }
             }
@@ -119,26 +116,24 @@ impl<'a> Searcher<'a> {
         for (r, p) in routes {
             let mut boarding: Option<Boarding> = None;
             let route = &self.map.routes[r];
-            let ordinal = route.ordinal[&p];
-            // TODO - closed routes?
-            for pi in &route.platforms[ordinal..] {
-                let pi_ordinal = route.ordinal[pi];
+            for pi in route.tail(p) {
+                let pi_ordinal = route.ordinal[&pi];
                 if let Some(boarding) = &boarding {
                     let arrival = boarding.trip.stops[pi_ordinal];
                     // With local and target pruning
-                    let minimal = cmp::min(self.best[*pi].arrival, self.arrival);
+                    let minimal = cmp::min(self.best[pi].arrival, self.arrival);
                     if arrival < minimal {
-                        self.best[*pi] = Label::new(arrival, Some(boarding.platform), Some(r));
-                        self.labels[round][*pi] = self.best[*pi].clone();
-                        marked.insert(*pi);
-                        self.update(pi, arrival);
+                        self.best[pi] = Label::new(arrival, Some(boarding.platform), Some(r));
+                        self.labels[round][pi] = self.best[pi].clone();
+                        marked.insert(pi);
+                        self.update(&pi, arrival);
                     }
                 }
-                let trip = self.try_catch(*pi, route, &boarding);
+                let trip = self.try_catch(&pi, route, &boarding);
                 if let Some(trip) = trip {
                     boarding = match &boarding {
                         Some(b) if trip == b.trip => boarding,
-                        _ => Some(Boarding::new(*pi, trip)),
+                        _ => Some(Boarding::new(pi, trip)),
                     };
                 }
             }
@@ -148,16 +143,15 @@ impl<'a> Searcher<'a> {
 
     fn try_catch(
         &self,
-        platform: PlatformIndex,
+        platform: &PlatformIndex,
         route: &'a Route,
         boarding: &Option<Boarding>,
     ) -> Option<&'a Trip> {
-        let arrival = self.best[platform].arrival;
-        let ordinal = route.ordinal[&platform];
-        return match boarding {
-            Some(b) if !(arrival < b.trip.stops[ordinal]) => None,
-            _ => next_trip(arrival, platform, route),
-        };
+        let arrival = self.best[*platform].arrival;
+        match boarding {
+            Some(b) => route.try_catch(arrival, platform, Some(b.trip)),
+            None => route.try_catch(arrival, platform, None),
+        }
     }
 
     fn transfer(&mut self, marked: &Marked) -> Marked {
@@ -219,10 +213,8 @@ impl<'a> Searcher<'a> {
         let mut points = vec![];
         if route.is_some() {
             let route = &self.map.routes[route.unwrap()];
-            let from = route.ordinal[&from];
-            let to = route.ordinal[&to];
-            for p in &route.platforms[from..=to] {
-                points.push(make_point(&self.map.platforms[*p].point));
+            for p in route.range(from, to) {
+                points.push(make_point(&self.map.platforms[p].point));
             }
         } else {
             points.push(make_point(&self.map.platforms[from].point));
@@ -247,12 +239,6 @@ fn make_point(point: &Point) -> Coord<f64> {
         x: point.lon,
         y: point.lat,
     }
-}
-
-fn next_trip<'a>(time: Time, platform: PlatformIndex, route: &'a Route) -> Option<&'a Trip> {
-    let ordinal = route.ordinal[&platform];
-    let i = route.trips.partition_point(|t| t.stops[ordinal] < time);
-    route.trips.get(i)
 }
 
 fn on_foot(labels: &Labels, platform: PlatformIndex) -> bool {
@@ -311,35 +297,6 @@ mod labels {
 }
 
 #[cfg(test)]
-mod utils {
-    use super::*;
-
-    fn route() -> Route {
-        let trips = vec![
-            Trip::new(vec![10, 60, 70]),
-            Trip::new(vec![30, 90, 100]),
-            Trip::new(vec![50, 110, 120]),
-        ];
-        Route::new(false, vec![0, 1, 2], trips)
-    }
-
-    #[test]
-    fn no_trip() {
-        let route = route();
-        let trip = next_trip(60, 0, &route);
-        assert!(trip.is_none());
-    }
-
-    #[test]
-    fn yes_trip() {
-        let route = route();
-        let trip = next_trip(70, 1, &route);
-        assert!(trip.is_some());
-        assert_eq!(90, trip.unwrap().stops[1]);
-    }
-}
-
-#[cfg(test)]
 mod searcher {
     use super::*;
 
@@ -364,12 +321,12 @@ mod searcher {
             Route::new(
                 false,
                 vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                vec![Trip::new(vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65])],
+                vec![Trip::new(1, vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65])],
             ),
             Route::new(
                 false,
                 vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-                vec![Trip::new(vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70])],
+                vec![Trip::new(2, vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70])],
             ),
         ]
     }

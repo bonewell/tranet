@@ -53,7 +53,7 @@ impl fmt::Display for Path {
             routes.push(part.route);
             let line = LineString::new(part.points.clone());
             collection.0.push(Geometry::LineString(line));
-            let point = (*part.points.last().unwrap()).into();
+            let point = part.last().clone().into();
             collection.0.push(Geometry::Point(point));
         }
         write!(f, "{}", collection.to_wkt())
