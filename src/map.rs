@@ -78,40 +78,63 @@ impl Route {
         self.circle && platform == self.platforms.last().unwrap()
     }
 
+    fn has_earlier(&self, time: Time, platform: &PlatformIndex, trip: &Trip) -> bool {
+        let ordinal = self.ordinal[platform];
+        time < trip.stops[ordinal]
+    }
+
     fn next_trip(&self, time: Time, platform: &PlatformIndex) -> Option<&Trip> {
         let ordinal = self.ordinal[platform];
         let i = self.trips.partition_point(|t| t.stops[ordinal] < time);
         self.trips.get(i)
     }
 
-    fn next_circle_trip(&self, current_trip: &Trip) -> Option<&Trip> {
-        let arrival = *current_trip.stops.last().unwrap();
-        let platform = self.platforms.first().unwrap();
-        self.next_trip(arrival, platform)
+    fn try_catch_next_trip(
+        &self,
+        time: Time,
+        platform: &PlatformIndex,
+        current_trip: Option<&Trip>,
+    ) -> Option<&Trip> {
+        match current_trip {
+            Some(trip) if !self.has_earlier(time, platform, trip) => None,
+            _ => self.next_trip(time, platform),
+        }
     }
 
-    fn move_on(&self, arrival: Time, platform: &PlatformIndex, trip: &Trip) -> bool {
-        let ordinal = self.ordinal[platform];
-        let next_circle = self.is_seam(platform);
-        let was_here_earlier = arrival < trip.stops[ordinal];
-        !next_circle && !was_here_earlier
+    fn next_trip_on_seam(&self, trip: &Trip) -> Option<&Trip> {
+        let platform = self.platforms.first().unwrap();
+        let time = *trip.stops.last().unwrap();
+        self.next_trip(time, platform)
+    }
+
+    fn try_catch_next_trip_on_seam(
+        &self,
+        time: Time,
+        platform: &PlatformIndex,
+        current_trip: Option<&Trip>,
+    ) -> Option<&Trip> {
+        match current_trip {
+            Some(trip) => self.next_trip_on_seam(trip),
+            None => {
+                let trip = self.next_trip(time, platform);
+                match trip {
+                    Some(trip) => self.next_trip_on_seam(trip),
+                    None => None,
+                }
+            }
+        }
     }
 
     pub fn try_catch(
         &self,
         time: Time,
         platform: &PlatformIndex,
-        trip: Option<&Trip>,
+        current_trip: Option<&Trip>,
     ) -> Option<&Trip> {
-        if let Some(trip) = trip {
-            if self.move_on(time, platform, trip) {
-                return None;
-            }
-            if self.is_seam(platform) {
-                return self.next_circle_trip(trip);
-            }
+        match self.is_seam(platform) {
+            true => self.try_catch_next_trip_on_seam(time, platform, current_trip),
+            false => self.try_catch_next_trip(time, platform, current_trip),
         }
-        self.next_trip(time, platform)
     }
 
     pub fn range(&self, from: PlatformIndex, to: PlatformIndex) -> Vec<PlatformIndex> {
@@ -177,15 +200,48 @@ mod trip {
     #[test]
     fn no_trip() {
         let route = route();
-        let trip = route.next_trip(60, &0);
+        let trip = route.try_catch(60, &0, None);
         assert!(trip.is_none());
     }
 
     #[test]
     fn yes_trip() {
         let route = route();
-        let trip = route.next_trip(70, &1);
+        let trip = route.try_catch(70, &1, None);
         assert!(trip.is_some());
-        assert_eq!(90, trip.unwrap().stops[1]);
+        assert_eq!(2, trip.unwrap().id);
+    }
+
+    #[test]
+    fn no_move_trip() {
+        let route = route();
+        let trip = &route.trips[0];
+        let trip = route.try_catch(60, &1, Some(trip));
+        assert!(trip.is_none());
+    }
+
+    fn circle_route() -> Route {
+        let trips = vec![
+            Trip::new(1, vec![10, 60, 70, 80]),
+            Trip::new(2, vec![40, 90, 110, 120]),
+            Trip::new(3, vec![80, 130, 140, 150]),
+        ];
+        Route::new(true, vec![0, 1, 2], trips)
+    }
+
+    #[test]
+    fn catch_circle_trip() {
+        let route = circle_route();
+        let trip = route.try_catch(60, &1, None);
+        assert!(trip.is_some());
+        assert_eq!(1, trip.unwrap().id);
+    }
+
+    #[test]
+    fn catch_circle_trip_on_seam() {
+        let route = circle_route();
+        let trip = route.try_catch(70, &2, None);
+        assert!(trip.is_some());
+        assert_eq!(3, trip.unwrap().id);
     }
 }
