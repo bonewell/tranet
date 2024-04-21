@@ -383,7 +383,44 @@ fn circle_on_seam() {
     );
     let platforms = Platforms::from(Walking::from([(3, 5)]), Walking::from([(1, 5)]));
     let mut searcher = Searcher::new(&map, platforms);
-    // TODO - how to join two parts?
+    let expected: Vec<Path> = vec![Path::new(
+        vec![Part::new(
+            vec![
+                coord! {x: 4., y: 0.},
+                coord! {x: 5., y: 0.},
+                coord! {x: 1., y: 0.},
+                coord! {x: 2., y: 0.},
+            ],
+            Some(0),
+        )],
+        75,
+    )];
+    assert_eq!(expected, searcher.run(1));
+}
+
+#[test]
+fn circle_on_seam_with_change_vehicle() {
+    let map = PublicTransport::new(
+        vec![
+            Platform::new(Point::new(0., 1.), vec![0]),
+            Platform::new(Point::new(0., 2.), vec![0]),
+            Platform::new(Point::new(0., 3.), vec![0]),
+            Platform::new(Point::new(0., 4.), vec![0]),
+            Platform::new(Point::new(0., 5.), vec![0]),
+        ],
+        vec![Route::new(
+            true,
+            vec![0, 1, 2, 3, 4],
+            vec![
+                Trip::new(1, vec![10, 20, 30, 40, 50, 60]),
+                Trip::new(2, vec![30, 40, 50, 60, 70, 80]),
+                Trip::new(3, vec![70, 80, 90, 100, 110, 120]),
+            ],
+        )],
+        vec![vec![]; 5],
+    );
+    let platforms = Platforms::from(Walking::from([(3, 5)]), Walking::from([(1, 5)]));
+    let mut searcher = Searcher::new(&map, platforms);
     let expected: Vec<Path> = vec![Path::new(
         vec![
             Part::new(vec![coord! {x: 4., y: 0.}, coord! {x: 5., y: 0.}], Some(0)),
@@ -396,7 +433,7 @@ fn circle_on_seam() {
                 Some(0),
             ),
         ],
-        75,
+        85,
     )];
     assert_eq!(expected, searcher.run(1));
 }
@@ -484,17 +521,15 @@ fn bidirectional_circle_on_seam() {
     let platforms = Platforms::from(Walking::from([(1, 5)]), Walking::from([(3, 5)]));
     let mut searcher = Searcher::new(&map, platforms);
     let expected: Vec<Path> = vec![Path::new(
-        vec![
-            Part::new(vec![coord! {x: 2., y: 0.}, coord! {x: 1., y: 0.}], Some(1)),
-            Part::new(
-                vec![
-                    coord! {x: 1., y: 0.},
-                    coord! {x: 5., y: 0.},
-                    coord! {x: 4., y: 0.},
-                ],
-                Some(1),
-            ),
-        ],
+        vec![Part::new(
+            vec![
+                coord! {x: 2., y: 0.},
+                coord! {x: 1., y: 0.},
+                coord! {x: 5., y: 0.},
+                coord! {x: 4., y: 0.},
+            ],
+            Some(1),
+        )],
         80,
     )];
     assert_eq!(expected, searcher.run(26));

@@ -37,15 +37,52 @@ impl Label {
     }
 }
 
-struct Boarding<'a> {
-    platform: PlatformIndex,
-    trip: &'a Trip,
+struct Vehicle<'a> {
+    route: &'a Route,
+    trip: Option<&'a Trip>,
+    boarding: Option<PlatformIndex>,
 }
 
-impl<'a> Boarding<'a> {
-    fn new(platform: PlatformIndex, trip: &'a Trip) -> Self {
-        Self { platform, trip }
+impl<'a> Vehicle<'a> {
+    fn new(route: &'a Route) -> Self {
+        Self {
+            route,
+            boarding: None,
+            trip: None,
+        }
     }
+
+    fn on_way(&self) -> bool {
+        self.trip.is_some()
+    }
+
+    fn arrival(&self, platform: &PlatformIndex) -> Time {
+        let ordinal = self.route.ordinal[platform];
+        self.trip.unwrap().stops[ordinal]
+    }
+
+    fn update(&mut self, time: Time, platform: &PlatformIndex) {
+        let trip = self.route.try_catch(time, platform, self.trip);
+        if let Some(next_trip) = trip {
+            match self.trip {
+                Some(current_trip) if current_trip == next_trip => (),
+                Some(current_trip)
+                    if self.route.is_seam(platform)
+                        && is_same_vehicle(&current_trip, next_trip) =>
+                {
+                    self.trip = Some(next_trip)
+                }
+                _ => {
+                    self.boarding = Some(*platform);
+                    self.trip = Some(next_trip);
+                }
+            };
+        }
+    }
+}
+
+fn is_same_vehicle(current_trip: &Trip, next_trip: &Trip) -> bool {
+    current_trip.stops.last().unwrap() == next_trip.stops.first().unwrap()
 }
 
 pub struct Searcher<'a> {
@@ -114,44 +151,25 @@ impl<'a> Searcher<'a> {
         let round = self.labels.len() - 1;
         let mut marked = Marked::new();
         for (r, p) in routes {
-            let mut boarding: Option<Boarding> = None;
             let route = &self.map.routes[r];
+            let mut vehicle = Vehicle::new(route);
             for pi in route.tail(p) {
-                let pi_ordinal = route.ordinal[&pi];
-                if let Some(boarding) = &boarding {
-                    let arrival = boarding.trip.stops[pi_ordinal];
+                if vehicle.on_way() {
+                    let arrival = vehicle.arrival(&pi);
                     // With local and target pruning
                     let minimal = cmp::min(self.best[pi].arrival, self.arrival);
                     if arrival < minimal {
-                        self.best[pi] = Label::new(arrival, Some(boarding.platform), Some(r));
+                        self.best[pi] = Label::new(arrival, vehicle.boarding, Some(r));
                         self.labels[round][pi] = self.best[pi].clone();
                         marked.insert(pi);
                         self.update(&pi, arrival);
                     }
                 }
-                let trip = self.try_catch(&pi, route, &boarding);
-                if let Some(trip) = trip {
-                    boarding = match &boarding {
-                        Some(b) if trip == b.trip => boarding,
-                        _ => Some(Boarding::new(pi, trip)),
-                    };
-                }
+                let arrival = self.best[pi].arrival;
+                vehicle.update(arrival, &pi);
             }
         }
         marked
-    }
-
-    fn try_catch(
-        &self,
-        platform: &PlatformIndex,
-        route: &'a Route,
-        boarding: &Option<Boarding>,
-    ) -> Option<&'a Trip> {
-        let arrival = self.best[*platform].arrival;
-        match boarding {
-            Some(b) => route.try_catch(arrival, platform, Some(b.trip)),
-            None => route.try_catch(arrival, platform, None),
-        }
     }
 
     fn transfer(&mut self, marked: &Marked) -> Marked {
