@@ -1,26 +1,23 @@
-use std::cmp::{self, Eq};
 use std::collections::{HashMap, HashSet};
 
-use geo_types::Coord;
-
-use crate::map::{PlatformIndex, Point, PublicTransport, Route, RouteIndex, Time, Trip};
+use crate::map::{PlatformIndex, PublicTransport, Route, RouteIndex, Time, Trip};
 use crate::path::{Part, Path};
 use crate::platforms::Platforms;
 
 type Marked = HashSet<PlatformIndex>;
 type Routes = HashMap<RouteIndex, PlatformIndex>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Label {
+#[derive(Debug, Clone, PartialEq)]
+struct Label<'a> {
     arrival: Time,
     from: Option<PlatformIndex>,
-    route: Option<RouteIndex>,
+    route: Option<&'a Route>,
 }
 
-type Labels = Vec<Label>;
+type Labels<'a> = Vec<Label<'a>>;
 
-impl Label {
-    fn new(arrival: Time, from: Option<PlatformIndex>, route: Option<RouteIndex>) -> Self {
+impl<'a> Label<'a> {
+    fn new(arrival: Time, from: Option<PlatformIndex>, route: Option<&'a Route>) -> Self {
         Self {
             arrival,
             from,
@@ -34,6 +31,10 @@ impl Label {
             from: None,
             route: None,
         }
+    }
+
+    fn dominate(&self, other: &Label) -> bool {
+        self.arrival < other.arrival
     }
 }
 
@@ -61,22 +62,28 @@ impl<'a> Vehicle<'a> {
         self.trip.unwrap().stops[ordinal]
     }
 
-    fn update(&mut self, time: Time, platform: &PlatformIndex) {
-        let trip = self.route.try_catch(time, platform, self.trip);
-        if let Some(next_trip) = trip {
-            match self.trip {
-                Some(current_trip) if current_trip == next_trip => (),
-                Some(current_trip)
-                    if self.route.is_seam(platform)
-                        && is_same_vehicle(&current_trip, next_trip) =>
-                {
-                    self.trip = Some(next_trip)
-                }
-                _ => {
-                    self.boarding = Some(*platform);
-                    self.trip = Some(next_trip);
-                }
-            };
+    fn make_label(&self, platform: &PlatformIndex) -> Label {
+        Label::new(self.arrival(platform), self.boarding, Some(self.route))
+    }
+
+    fn update(&mut self, label: &Label) {
+        if let Some(platform) = &label.from {
+            let trip = self.route.try_catch(label.arrival, platform, self.trip);
+            if let Some(next_trip) = trip {
+                match self.trip {
+                    Some(current_trip) if current_trip == next_trip => (),
+                    Some(current_trip)
+                        if self.route.is_seam(platform)
+                            && is_same_vehicle(&current_trip, next_trip) =>
+                    {
+                        self.trip = Some(next_trip)
+                    }
+                    _ => {
+                        self.boarding = Some(*platform);
+                        self.trip = Some(next_trip);
+                    }
+                };
+            }
         }
     }
 }
@@ -88,9 +95,9 @@ fn is_same_vehicle(current_trip: &Trip, next_trip: &Trip) -> bool {
 pub struct Searcher<'a> {
     map: &'a PublicTransport,
     platforms: Platforms,
-    arrival: Time,
-    best: Labels,
-    labels: Vec<Labels>,
+    target: Label<'a>,
+    best: Labels<'a>,
+    labels: Vec<Labels<'a>>,
 }
 
 impl<'a> Searcher<'a> {
@@ -98,7 +105,7 @@ impl<'a> Searcher<'a> {
         Self {
             map,
             platforms,
-            arrival: Time::MAX,
+            target: Label::infinity(),
             best: vec![Label::infinity(); map.platforms.len()],
             labels: vec![],
         }
@@ -155,21 +162,27 @@ impl<'a> Searcher<'a> {
             let mut vehicle = Vehicle::new(route);
             for pi in route.tail(p) {
                 if vehicle.on_way() {
-                    let arrival = vehicle.arrival(&pi);
-                    // With local and target pruning
-                    let minimal = cmp::min(self.best[pi].arrival, self.arrival);
-                    if arrival < minimal {
-                        self.best[pi] = Label::new(arrival, vehicle.boarding, Some(r));
+                    let label = vehicle.make_label(&pi);
+                    if label.dominate(self.best_label(&pi)) {
+                        self.best[pi] = label;
                         self.labels[round][pi] = self.best[pi].clone();
                         marked.insert(pi);
-                        self.update(&pi, arrival);
+                        self.update_target(pi);
                     }
                 }
-                let arrival = self.best[pi].arrival;
-                vehicle.update(arrival, &pi);
+                vehicle.update(&self.best[pi]);
             }
         }
         marked
+    }
+
+    fn best_label(&self, platform: &PlatformIndex) -> &Label {
+        // With local and target pruning
+        let label = &self.best[*platform];
+        match self.target.dominate(label) {
+            true => &self.target,
+            false => label,
+        }
     }
 
     fn transfer(&mut self, marked: &Marked) -> Marked {
@@ -227,35 +240,37 @@ impl<'a> Searcher<'a> {
         Some(Path::new(parts, arrival))
     }
 
-    fn make_part(&self, from: PlatformIndex, to: PlatformIndex, route: Option<RouteIndex>) -> Part {
-        let mut points = vec![];
-        if route.is_some() {
-            let route = &self.map.routes[route.unwrap()];
-            for p in route.range(from, to) {
-                points.push(make_point(&self.map.platforms[p].point));
-            }
-        } else {
-            points.push(make_point(&self.map.platforms[from].point));
-            points.push(make_point(&self.map.platforms[to].point));
-        }
-        Part::new(points, route)
+    fn make_part(&self, from: PlatformIndex, to: PlatformIndex, route: Option<&Route>) -> Part {
+        let points = match route {
+            Some(route) => route
+                .range(from, to)
+                .iter()
+                .map(|p| (&self.map.platforms[*p].point).into())
+                .collect(),
+            None => vec![
+                (&self.map.platforms[from].point).into(),
+                (&self.map.platforms[to].point).into(),
+            ],
+        };
+        let route_id = match route {
+            Some(route) => Some(route.id),
+            None => None,
+        };
+        Part::new(points, route_id)
     }
 
-    fn update(&mut self, platform: &PlatformIndex, arrival: Time) {
-        if let Some(duration) = self.platforms.to.get(platform) {
-            self.arrival = cmp::min(arrival + duration, self.arrival);
+    fn update_target(&mut self, platform: PlatformIndex) {
+        if let Some(duration) = self.platforms.to.get(&platform) {
+            let arrival = &self.best[platform].arrival + duration;
+            let new_target = Label::new(arrival, Some(platform), None);
+            if new_target.dominate(&self.target) {
+                self.target = new_target;
+            }
         }
     }
 
     fn is_from(&self, platform: &Option<PlatformIndex>) -> bool {
         platform.is_some() && self.platforms.from.contains_key(&platform.unwrap())
-    }
-}
-
-fn make_point(point: &Point) -> Coord<f64> {
-    Coord {
-        x: point.lon,
-        y: point.lat,
     }
 }
 
@@ -280,36 +295,43 @@ mod labels {
 
     #[test]
     fn similar() {
-        let lhs = vec![Label::new(34, Some(2), Some(8))];
-        let rhs = vec![Label::new(34, Some(2), Some(8))];
+        let route = Route::new(1, false, vec![], vec![]);
+        let lhs = vec![Label::new(34, Some(2), Some(&route))];
+        let rhs = vec![Label::new(34, Some(2), Some(&route))];
         assert!(is_similar(&lhs, &rhs, 0));
     }
 
     #[test]
     fn different_route() {
-        let lhs = vec![Label::new(34, Some(2), Some(1))];
-        let rhs = vec![Label::new(34, Some(2), Some(8))];
+        let route1 = Route::new(1, false, vec![], vec![]);
+        let route2 = Route::new(8, false, vec![], vec![]);
+        let lhs = vec![Label::new(34, Some(2), Some(&route1))];
+        let rhs = vec![Label::new(34, Some(2), Some(&route2))];
         assert!(!is_similar(&lhs, &rhs, 0));
     }
 
     #[test]
     fn different_platform() {
-        let lhs = vec![Label::new(34, Some(2), Some(8))];
-        let rhs = vec![Label::new(34, Some(3), Some(8))];
+        let route = Route::new(8, false, vec![], vec![]);
+        let lhs = vec![Label::new(34, Some(2), Some(&route))];
+        let rhs = vec![Label::new(34, Some(3), Some(&route))];
         assert!(!is_similar(&lhs, &rhs, 0));
     }
 
     #[test]
     fn different_time() {
-        let lhs = vec![Label::new(34, Some(2), Some(8))];
-        let rhs = vec![Label::new(67, Some(2), Some(8))];
+        let route = Route::new(8, false, vec![], vec![]);
+        let lhs = vec![Label::new(34, Some(2), Some(&route))];
+        let rhs = vec![Label::new(67, Some(2), Some(&route))];
         assert!(!is_similar(&lhs, &rhs, 0));
     }
 
     #[test]
     fn different() {
-        let lhs = vec![Label::new(34, Some(2), Some(8))];
-        let rhs = vec![Label::new(67, Some(3), Some(1))];
+        let route1 = Route::new(1, false, vec![], vec![]);
+        let route2 = Route::new(8, false, vec![], vec![]);
+        let lhs = vec![Label::new(34, Some(2), Some(&route2))];
+        let rhs = vec![Label::new(67, Some(3), Some(&route1))];
         assert!(!is_similar(&lhs, &rhs, 0));
     }
 }
@@ -319,7 +341,7 @@ mod searcher {
     use super::*;
 
     use crate::{
-        map::{Passage, Platform},
+        map::{Passage, Platform, Point},
         platforms::Platforms,
     };
 
@@ -337,11 +359,13 @@ mod searcher {
     fn routes() -> Vec<Route> {
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 vec![Trip::new(1, vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65])],
             ),
             Route::new(
+                1,
                 false,
                 vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
                 vec![Trip::new(2, vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70])],

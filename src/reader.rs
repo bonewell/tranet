@@ -140,7 +140,7 @@ impl From<&Value> for Platform {
 impl From<&Value> for Trip {
     fn from(value: &Value) -> Self {
         let stops = make_vec_of_i64(&value);
-        static mut ID: i32 = 0;
+        static mut ID: i64 = 0;
         unsafe {
             let id = ID;
             ID += 1;
@@ -172,7 +172,12 @@ impl From<&Value> for Route {
                 .get(&HashableValue::String(String::from("trips")))
                 .unwrap_or(&Value::None),
         );
-        Route::new(circle, platforms, trips)
+        static mut ID: i64 = 0;
+        unsafe {
+            let id = ID;
+            ID += 1;
+            Route::new(id, circle, platforms, trips)
+        }
     }
 }
 

@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
+use geo_types::Coord;
+
 pub type Time = i64;
 pub type RouteIndex = usize;
+pub type RouteId = i64;
+pub type TripId = i64;
 pub type PlatformIndex = usize;
 pub type SequenceNumber = usize;
 
@@ -9,6 +13,15 @@ pub type SequenceNumber = usize;
 pub struct Point {
     pub lat: f64,
     pub lon: f64,
+}
+
+impl From<&Point> for Coord<f64> {
+    fn from(point: &Point) -> Self {
+        Self {
+            x: point.lon,
+            y: point.lat,
+        }
+    }
 }
 
 impl Point {
@@ -31,12 +44,12 @@ impl Platform {
 
 #[derive(Debug)]
 pub struct Trip {
-    id: i32,
+    id: TripId,
     pub stops: Vec<Time>,
 }
 
 impl Trip {
-    pub fn new(id: i32, stops: Vec<Time>) -> Self {
+    pub fn new(id: TripId, stops: Vec<Time>) -> Self {
         Self { id, stops }
     }
 }
@@ -49,20 +62,28 @@ impl PartialEq for Trip {
 
 #[derive(Debug)]
 pub struct Route {
+    pub id: RouteId,
     circle: bool,
     platforms: Vec<PlatformIndex>,
     trips: Vec<Trip>,
     pub ordinal: HashMap<PlatformIndex, SequenceNumber>,
 }
 
+impl PartialEq for Route {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Route {
-    pub fn new(circle: bool, platforms: Vec<PlatformIndex>, trips: Vec<Trip>) -> Self {
+    pub fn new(id: RouteId, circle: bool, platforms: Vec<PlatformIndex>, trips: Vec<Trip>) -> Self {
         let ordinal = platforms
             .iter()
             .enumerate()
             .map(|(index, platform)| (*platform, index))
             .collect();
         Self {
+            id,
             circle,
             platforms,
             trips,
@@ -194,7 +215,7 @@ mod trip {
             Trip::new(2, vec![30, 90, 100]),
             Trip::new(3, vec![50, 110, 120]),
         ];
-        Route::new(false, vec![0, 1, 2], trips)
+        Route::new(0, false, vec![0, 1, 2], trips)
     }
 
     #[test]
@@ -226,7 +247,7 @@ mod trip {
             Trip::new(2, vec![40, 90, 110, 120]),
             Trip::new(3, vec![80, 130, 140, 150]),
         ];
-        Route::new(true, vec![0, 1, 2], trips)
+        Route::new(0, true, vec![0, 1, 2], trips)
     }
 
     #[test]

@@ -3,16 +3,16 @@ use std::fmt;
 use geo_types::{Coord, Geometry, GeometryCollection, LineString};
 use wkt::ToWkt;
 
-use crate::map::{RouteIndex, Time};
+use crate::map::{RouteId, Time};
 
 #[derive(Debug, PartialEq)]
 pub struct Part {
     points: Vec<Coord<f64>>,
-    route: Option<RouteIndex>,
+    route: Option<RouteId>,
 }
 
 impl Part {
-    pub fn new(points: Vec<Coord<f64>>, route: Option<RouteIndex>) -> Self {
+    pub fn new(points: Vec<Coord<f64>>, route: Option<RouteId>) -> Self {
         Self { points, route }
     }
 

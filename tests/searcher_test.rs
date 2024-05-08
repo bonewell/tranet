@@ -18,6 +18,7 @@ fn one_route() {
             Platform::new(Point::new(0., 5.), vec![0]),
         ],
         vec![Route::new(
+            0,
             false,
             vec![0, 1, 2, 3, 4],
             vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
@@ -58,11 +59,13 @@ fn two_cross_route() {
         ],
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4],
                 vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
             ),
             Route::new(
+                1,
                 false,
                 vec![5, 6, 2, 7, 8],
                 vec![Trip::new(2, vec![20, 40, 60, 70, 80])],
@@ -103,11 +106,13 @@ fn two_parallel_route() {
         ],
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4],
                 vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
             ),
             Route::new(
+                1,
                 false,
                 vec![0, 5, 6, 7, 4],
                 vec![Trip::new(2, vec![7, 20, 40, 60, 73])],
@@ -150,16 +155,19 @@ fn direct_faster() {
         ],
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4],
                 vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
             ),
             Route::new(
+                1,
                 false,
                 vec![0, 5, 6, 7],
                 vec![Trip::new(2, vec![7, 10, 20, 30])],
             ),
             Route::new(
+                2,
                 false,
                 vec![7, 8, 9, 4],
                 vec![Trip::new(3, vec![35, 45, 55, 65])],
@@ -202,16 +210,19 @@ fn direct_slower() {
         ],
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4],
                 vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
             ),
             Route::new(
+                1,
                 false,
                 vec![0, 5, 6, 7],
                 vec![Trip::new(2, vec![7, 15, 20, 25])],
             ),
             Route::new(
+                2,
                 false,
                 vec![7, 8, 9, 4],
                 vec![Trip::new(3, vec![30, 35, 40, 45])],
@@ -278,11 +289,13 @@ fn do_transfer() {
         ],
         vec![
             Route::new(
+                0,
                 false,
                 vec![0, 1, 2, 3, 4],
                 vec![Trip::new(1, vec![10, 20, 30, 40, 50])],
             ),
             Route::new(
+                1,
                 false,
                 vec![5, 6, 7, 8],
                 vec![Trip::new(2, vec![10, 20, 40, 60])],
@@ -334,6 +347,7 @@ fn circle() {
             Platform::new(Point::new(0., 5.), vec![0]),
         ],
         vec![Route::new(
+            0,
             true,
             vec![0, 1, 2, 3, 4],
             vec![
@@ -371,6 +385,7 @@ fn circle_on_seam() {
             Platform::new(Point::new(0., 5.), vec![0]),
         ],
         vec![Route::new(
+            0,
             true,
             vec![0, 1, 2, 3, 4],
             vec![
@@ -409,6 +424,7 @@ fn circle_on_seam_with_change_vehicle() {
             Platform::new(Point::new(0., 5.), vec![0]),
         ],
         vec![Route::new(
+            0,
             true,
             vec![0, 1, 2, 3, 4],
             vec![
@@ -450,6 +466,7 @@ fn bidirectional_circle() {
         ],
         vec![
             Route::new(
+                0,
                 true,
                 vec![0, 1, 2, 3, 4],
                 vec![
@@ -459,6 +476,7 @@ fn bidirectional_circle() {
                 ],
             ),
             Route::new(
+                1,
                 true,
                 vec![4, 3, 2, 1, 0],
                 vec![
@@ -498,6 +516,7 @@ fn bidirectional_circle_on_seam() {
         ],
         vec![
             Route::new(
+                0,
                 true,
                 vec![0, 1, 2, 3, 4],
                 vec![
@@ -507,6 +526,7 @@ fn bidirectional_circle_on_seam() {
                 ],
             ),
             Route::new(
+                1,
                 true,
                 vec![4, 3, 2, 1, 0],
                 vec![
