@@ -243,7 +243,7 @@ impl<'a> Searcher<'a> {
 
     fn update(&mut self, platform: &PlatformIndex, arrival: Time) {
         if let Some(duration) = self.platforms.to.get(platform) {
-            self.arrival = arrival + duration;
+            self.arrival = cmp::min(arrival + duration, self.arrival);
         }
     }
 
