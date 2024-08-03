@@ -43,6 +43,41 @@ fn one_route() {
 }
 
 #[test]
+fn loop_route() {
+    let map = PublicTransport::new(
+        vec![
+            Platform::new(Point::new(0., 1.), vec![0]),
+            Platform::new(Point::new(0., 2.), vec![0]),
+            Platform::new(Point::new(0., 3.), vec![0]),
+            Platform::new(Point::new(0., 4.), vec![0]),
+            Platform::new(Point::new(0., 5.), vec![0]),
+        ],
+        vec![Route::new(
+            false,
+            vec![0, 1, 2, 1, 3, 4],
+            vec![Trip::new(1, vec![10, 20, 30, 40, 50, 60])],
+        )],
+        vec![vec![]; 5],
+    );
+    let platforms = Platforms::from(Walking::from([(1, 5)]), Walking::from([(4, 10)]));
+    let mut searcher = Searcher::new(&map, platforms);
+    let expected: Vec<Path> = vec![Path::new(
+        vec![Part::new(
+            vec![
+                coord! {x: 2., y: 0.},
+                coord! {x: 3., y: 0.},
+                coord! {x: 2., y: 0.},
+                coord! {x: 4., y: 0.},
+                coord! {x: 5., y: 0.},
+            ],
+            Some(0),
+        )],
+        70,
+    )];
+    assert_eq!(expected, searcher.run(1));
+}
+
+#[test]
 fn two_cross_route() {
     let map = PublicTransport::new(
         vec![
