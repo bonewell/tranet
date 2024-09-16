@@ -163,10 +163,7 @@ impl From<&Value> for Route {
                 .get(&HashableValue::String(String::from("platforms")))
                 .unwrap_or(&Value::None),
         );
-        let platforms = match circle {
-            true => platforms[..platforms.len() - 1].to_vec(),
-            false => platforms.to_vec(),
-        };
+        let platforms = platforms.to_vec();
         let trips = make_vec(
             route
                 .get(&HashableValue::String(String::from("trips")))

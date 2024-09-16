@@ -479,14 +479,20 @@ mod searcher {
     fn loop_routes() -> Vec<Route> {
         vec![
             Route::new(
-                false,
+                true,
                 vec![0, 1, 2, 3, 4, 3, 6, 7, 8, 9],
-                vec![Trip::new(1, vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65])],
+                vec![Trip::new(
+                    1,
+                    vec![20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70],
+                )],
             ),
             Route::new(
-                false,
+                true,
                 vec![10, 11, 12, 13, 14, 15, 16, 15, 18, 19],
-                vec![Trip::new(2, vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70])],
+                vec![Trip::new(
+                    2,
+                    vec![25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75],
+                )],
             ),
         ]
     }
